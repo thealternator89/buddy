@@ -20,13 +20,13 @@ import {
   CategoryFlatItem,
   flattenCategoryTree,
 } from '@/lib/category-utils';
-import { Payee } from '@/lib/db/schema';
+import { PayeeWithRules } from '@/lib/actions/payees';
 
 interface TransactionTableProps {
   initialTransactions: TransactionWithDetails[];
   accounts: AccountWithBalance[];
   categories: (CategoryNode | CategoryFlatItem)[];
-  payees?: Payee[];
+  payees?: PayeeWithRules[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
   selectedPayeeId?: string;

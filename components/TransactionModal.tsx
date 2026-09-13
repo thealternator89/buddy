@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Sparkles, Check } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
-import { Payee } from '@/lib/db/schema';
+import { PayeeWithRules } from '@/lib/actions/payees';
+import { resolvePayeeCategory, formatRuleCondition, RuleMatchResult } from '@/lib/payee-rules';
 import { createTransaction } from '@/lib/actions/transactions';
 import { APP_CONFIG } from '@/lib/constants';
 
@@ -17,7 +18,7 @@ interface TransactionModalProps {
   onClose: () => void;
   accounts: AccountWithBalance[];
   categories: (CategoryNode | CategoryFlatItem)[];
-  payees: Payee[];
+  payees: PayeeWithRules[];
   defaultAccountId?: string;
 }
 
@@ -37,13 +38,35 @@ export function TransactionModal({
     accounts.find((a) => a.id !== (defaultAccountId || accounts[0]?.id))?.id || ''
   );
   const [payeeName, setPayeeName] = useState('');
+  const [selectedPayeeObj, setSelectedPayeeObj] = useState<PayeeWithRules | null>(null);
   const [categoryId, setCategoryId] = useState('');
+  const [categorySuggestion, setCategorySuggestion] = useState<RuleMatchResult | null>(null);
   const [amountCents, setAmountCents] = useState<number>(0);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
   const [isCleared, setIsCleared] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const applyPayeeCategory = (targetPayee: PayeeWithRules | null, amount: number) => {
+    if (!targetPayee) return;
+    const match = resolvePayeeCategory(targetPayee, amount);
+    if (match) {
+      setCategoryId(match.categoryId);
+      setCategorySuggestion(match);
+    }
+  };
+
+  const handleAmountBlur = () => {
+    if (type === 'transfer' || !payeeName.trim()) return;
+    const currentPayee =
+      selectedPayeeObj ||
+      payees.find((p) => p.name.toLowerCase() === payeeName.trim().toLowerCase()) ||
+      null;
+    if (currentPayee) {
+      applyPayeeCategory(currentPayee, amountCents);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -191,6 +214,7 @@ export function TransactionModal({
               <CurrencyInput
                 valueCents={amountCents}
                 onChangeCents={setAmountCents}
+                onBlur={handleAmountBlur}
                 autoFocus
               />
             </div>
@@ -264,10 +288,18 @@ export function TransactionModal({
                     <PayeeCombobox
                       payees={payees}
                       value={payeeName}
-                      onChange={(name, defaultCategoryId) => {
+                      onChange={(name, defaultCatId, payeeObj) => {
                         setPayeeName(name);
-                        if (defaultCategoryId) {
-                          setCategoryId(defaultCategoryId);
+                        const resolvedPayee =
+                          payeeObj ||
+                          payees.find((p) => p.name.toLowerCase() === name.trim().toLowerCase()) ||
+                          null;
+                        setSelectedPayeeObj(resolvedPayee);
+                        if (resolvedPayee) {
+                          applyPayeeCategory(resolvedPayee, amountCents);
+                        } else if (defaultCatId) {
+                          setCategoryId(defaultCatId);
+                          setCategorySuggestion({ categoryId: defaultCatId, source: 'default' });
                         }
                       }}
                       placeholder={type === 'income' ? 'Search or add payer...' : 'Search or add payee...'}
@@ -285,9 +317,29 @@ export function TransactionModal({
                   <CategoryCombobox
                     categories={categories}
                     value={categoryId}
-                    onChange={setCategoryId}
+                    onChange={(newCatId) => {
+                      setCategoryId(newCatId);
+                      setCategorySuggestion(null);
+                    }}
                   />
                 </div>
+                {categorySuggestion && categorySuggestion.categoryId === categoryId && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs animate-in fade-in duration-150">
+                    {categorySuggestion.source === 'rule' && categorySuggestion.matchedRule ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>
+                          Auto-assigned by rule ({formatRuleCondition(categorySuggestion.matchedRule.operator, categorySuggestion.matchedRule.amountCents)})
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        <span>Payee default category</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}

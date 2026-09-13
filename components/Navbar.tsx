@@ -16,12 +16,12 @@ import { useState } from 'react';
 import { TransactionModal } from './TransactionModal';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
-import { Payee } from '@/lib/db/schema';
+import { PayeeWithRules } from '@/lib/actions/payees';
 
 interface NavbarProps {
   accounts?: AccountWithBalance[];
   categories?: (CategoryNode | CategoryFlatItem)[];
-  payees?: Payee[];
+  payees?: PayeeWithRules[];
 }
 
 export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarProps) {

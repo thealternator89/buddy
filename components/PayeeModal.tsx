@@ -1,13 +1,20 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import { X, Building2 } from 'lucide-react';
+import { X, Building2, Plus, Trash2, Sliders, Sparkles } from 'lucide-react';
 import {
   CategoryNode,
   CategoryFlatItem,
   flattenCategoryTree,
 } from '@/lib/category-utils';
-import { PayeeWithStats, createPayee, updatePayee } from '@/lib/actions/payees';
+import { PayeeWithStats, createPayee, updatePayee, CreatePayeeRuleInput } from '@/lib/actions/payees';
+import {
+  RuleOperator,
+  PayeeWithRules,
+  PayeeRuleItem,
+  resolvePayeeCategory,
+  formatRuleCondition,
+} from '@/lib/payee-rules';
 
 interface PayeeModalProps {
   isOpen: boolean;
@@ -16,10 +23,27 @@ interface PayeeModalProps {
   payee?: PayeeWithStats | null;
 }
 
+interface RuleDraft {
+  id?: string;
+  operator: RuleOperator;
+  amountStr: string;
+  categoryId: string;
+}
+
 export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee }: PayeeModalProps) {
   const isEditing = Boolean(payee);
   const [name, setName] = useState(payee?.name || '');
   const [defaultCategoryId, setDefaultCategoryId] = useState(payee?.defaultCategoryId || '');
+  const [rules, setRules] = useState<RuleDraft[]>(() => {
+    if (!payee?.rules) return [];
+    return payee.rules.map((r) => ({
+      id: r.id,
+      operator: r.operator,
+      amountStr: (r.amountCents / 100).toFixed(2),
+      categoryId: r.categoryId,
+    }));
+  });
+  const [testAmountStr, setTestAmountStr] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -31,6 +55,62 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
     return inputCategories as CategoryFlatItem[];
   }, [inputCategories]);
 
+  const handleAddRule = () => {
+    setRules((prev) => [
+      ...prev,
+      {
+        operator: 'lte',
+        amountStr: '',
+        categoryId: defaultCategoryId || (flatCategories[0]?.id ?? ''),
+      },
+    ]);
+  };
+
+  const handleUpdateRule = (index: number, field: keyof RuleDraft, value: string) => {
+    setRules((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleRemoveRule = (index: number) => {
+    setRules((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Live test simulation for user verification
+  const testSimulation = useMemo(() => {
+    const parsed = parseFloat(testAmountStr);
+    if (isNaN(parsed) || parsed <= 0) return null;
+
+    const validRules: PayeeRuleItem[] = rules
+      .filter((r) => r.categoryId && !isNaN(parseFloat(r.amountStr)) && parseFloat(r.amountStr) > 0)
+      .map((r, i) => ({
+        categoryId: r.categoryId,
+        operator: r.operator,
+        amountCents: Math.round(parseFloat(r.amountStr) * 100),
+        sortOrder: i,
+      }));
+
+    const tempPayee: PayeeWithRules = {
+      id: payee?.id || 'preview',
+      name: name || 'Payee',
+      defaultCategoryId: defaultCategoryId || null,
+      rules: validRules,
+    };
+
+    const testCents = Math.round(parsed * 100);
+    const result = resolvePayeeCategory(tempPayee, testCents);
+    if (!result) return { categoryName: 'None (Unassigned)', source: 'none' as const };
+
+    const cat = flatCategories.find((c) => c.id === result.categoryId);
+    return {
+      categoryName: cat?.name || 'Unknown Category',
+      source: result.source,
+      matchedRule: result.matchedRule,
+    };
+  }, [testAmountStr, rules, name, defaultCategoryId, flatCategories, payee?.id]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -40,15 +120,36 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
       return;
     }
 
+    // Validate rules
+    const payloadRules: CreatePayeeRuleInput[] = [];
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const parsed = parseFloat(r.amountStr);
+      if (isNaN(parsed) || parsed <= 0) {
+        setError(`Rule #${i + 1} requires a valid positive amount (e.g. 5.00).`);
+        return;
+      }
+      if (!r.categoryId) {
+        setError(`Rule #${i + 1} requires a category to be selected.`);
+        return;
+      }
+      payloadRules.push({
+        categoryId: r.categoryId,
+        operator: r.operator,
+        amountCents: Math.round(parsed * 100),
+      });
+    }
+
     startTransition(async () => {
       try {
         if (isEditing && payee) {
           await updatePayee(payee.id, {
             name: name.trim(),
             defaultCategoryId: defaultCategoryId || null,
+            rules: payloadRules,
           });
         } else {
-          await createPayee(name.trim(), defaultCategoryId || null);
+          await createPayee(name.trim(), defaultCategoryId || null, payloadRules);
         }
         onClose();
       } catch (err: unknown) {
@@ -60,11 +161,12 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
+        className="w-full max-w-xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-100 p-6 pb-4 dark:border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
               <Building2 className="h-5 w-5" />
@@ -74,7 +176,9 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
                 {isEditing ? 'Edit Payee' : 'New Payee'}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {isEditing ? 'Update payee details and default category.' : 'Add a merchant or organization.'}
+                {isEditing
+                  ? 'Configure payee details, default category, and amount rules.'
+                  : 'Add a merchant or organization and custom category rules.'}
               </p>
             </div>
           </div>
@@ -86,13 +190,14 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
           </button>
         </div>
 
-        {error && (
-          <div className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-            {error}
-          </div>
-        )}
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          {error && (
+            <div className="rounded-lg bg-rose-50 p-3 text-sm font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Payee Name
@@ -110,7 +215,7 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Default Category (Optional)
+              Default Category (Fallback)
             </label>
             <select
               value={defaultCategoryId}
@@ -129,10 +234,178 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
               })}
             </select>
             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              Transactions recorded for this payee will automatically suggest this category. You can choose any parent or child category.
+              Used when no amount-based rule matches or when no rules are configured.
             </p>
           </div>
 
+          {/* Amount-Based Rules Section */}
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                  <Sliders className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Amount-Based Category Rules</span>
+                </label>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Closest rule wins (inclusive). For example, if you set ≤ $3 and ≤ $5, amounts under $3 match $3, and $4–$5 match $5.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddRule}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Rule</span>
+              </button>
+            </div>
+
+            {rules.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-4 text-center text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-800/20">
+                No amount rules defined. All payments will use the default category.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Column header on desktop */}
+                <div className="hidden sm:flex items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  <span className="w-28 shrink-0">Condition</span>
+                  <span className="w-28 shrink-0">Amount</span>
+                  <span className="w-4 shrink-0 text-center"></span>
+                  <span className="flex-1 min-w-0">Target Category</span>
+                  <span className="w-7 shrink-0"></span>
+                </div>
+
+                {rules.map((rule, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2"
+                  >
+                    {/* Left: Operator + Amount + Mobile Delete */}
+                    <div className="flex items-center gap-2">
+                      {/* Operator */}
+                      <select
+                        value={rule.operator}
+                        onChange={(e) => handleUpdateRule(idx, 'operator', e.target.value as RuleOperator)}
+                        className="w-28 shrink-0 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 font-medium focus:border-emerald-500 focus:outline-none"
+                      >
+                        <option value="lte">≤ At most</option>
+                        <option value="gte">≥ At least</option>
+                      </select>
+
+                      {/* Amount Input Group */}
+                      <div className="flex items-center w-24 sm:w-28 shrink-0 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 overflow-hidden">
+                        <span className="pl-2.5 pr-0.5 text-xs font-bold text-zinc-400 select-none">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required
+                          placeholder="0.00"
+                          value={rule.amountStr}
+                          onChange={(e) => handleUpdateRule(idx, 'amountStr', e.target.value)}
+                          className="w-full bg-transparent py-1.5 pr-2 pl-0.5 text-xs font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+
+                      {/* Delete button (visible on mobile) */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRule(idx)}
+                        className="sm:hidden ml-auto p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors shrink-0"
+                        title="Delete rule"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="hidden sm:block text-zinc-400 shrink-0 text-xs">➔</div>
+
+                    {/* Category Select: takes all remaining space */}
+                    <div className="flex-1 min-w-0 w-full">
+                      <select
+                        value={rule.categoryId}
+                        onChange={(e) => handleUpdateRule(idx, 'categoryId', e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 font-mono focus:border-emerald-500 focus:outline-none truncate"
+                        required
+                      >
+                        <option value="">Select target category...</option>
+                        {flatCategories.map((cat) => {
+                          const indent = '  '.repeat(cat.depth);
+                          const prefix = cat.depth > 0 ? '↳ ' : '● ';
+                          return (
+                            <option key={cat.id} value={cat.id}>
+                              {indent}{prefix}{cat.name}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Delete button (desktop) */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRule(idx)}
+                      className="hidden sm:block p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors shrink-0"
+                      title="Delete rule"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Live Test Simulator Widget */}
+            {rules.length > 0 && (
+              <div className="rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                    Live Rule Tester:
+                  </span>
+                  <div className="flex items-center w-24 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 overflow-hidden">
+                    <span className="pl-2 pr-0.5 text-xs font-bold text-zinc-400 select-none">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="4.50"
+                      value={testAmountStr}
+                      onChange={(e) => setTestAmountStr(e.target.value)}
+                      className="w-full bg-transparent py-1 pr-1.5 pl-0.5 text-xs font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                  <span>Result:</span>
+                  {testSimulation ? (
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                      {testSimulation.categoryName}
+                      {testSimulation.source === 'rule' && testSimulation.matchedRule && (
+                        <span className="text-[10px] font-normal text-emerald-600/80 dark:text-emerald-400/80">
+                          ({formatRuleCondition(testSimulation.matchedRule.operator, testSimulation.matchedRule.amountCents)})
+                        </span>
+                      )}
+                      {testSimulation.source === 'default' && (
+                        <span className="text-[10px] font-normal text-zinc-500">
+                          (Fallback default)
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-zinc-400 italic">Enter amount to test</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Footer */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
             <button
               type="button"

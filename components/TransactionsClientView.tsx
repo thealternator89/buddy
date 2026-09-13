@@ -6,14 +6,14 @@ import { TransactionModal } from './TransactionModal';
 import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
-import { Payee } from '@/lib/db/schema';
+import { PayeeWithRules } from '@/lib/actions/payees';
 import { PlusCircle } from 'lucide-react';
 
 interface TransactionsClientViewProps {
   transactions: TransactionWithDetails[];
   accounts: AccountWithBalance[];
   categories: (CategoryNode | CategoryFlatItem)[];
-  payees: Payee[];
+  payees: PayeeWithRules[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
   selectedPayeeId?: string;

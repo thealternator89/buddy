@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Payee } from '@/lib/db/schema';
+import { PayeeWithRules } from '@/lib/actions/payees';
 import { Plus, Check, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PayeeComboboxProps {
-  payees: Payee[];
+  payees: PayeeWithRules[];
   value: string;
-  onChange: (payeeName: string, defaultCategoryId?: string | null) => void;
+  onChange: (payeeName: string, defaultCategoryId?: string | null, payee?: PayeeWithRules | null) => void;
   placeholder?: string;
   autoFocus?: boolean;
 }
@@ -51,23 +51,23 @@ export function PayeeCombobox({
     (p) => p.name.toLowerCase() === trimmedQuery
   );
 
-  const handleSelectPayee = (payee: Payee) => {
+  const handleSelectPayee = (payee: PayeeWithRules) => {
     setQuery(payee.name);
-    onChange(payee.name, payee.defaultCategoryId);
+    onChange(payee.name, payee.defaultCategoryId, payee);
     setIsOpen(false);
   };
 
   const handleCreateNew = () => {
     const name = query.trim();
     if (!name) return;
-    onChange(name, null);
+    onChange(name, null, null);
     setIsOpen(false);
   };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
     setQuery('');
-    onChange('', null);
+    onChange('', null, null);
   };
 
   return (

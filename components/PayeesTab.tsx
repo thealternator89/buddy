@@ -18,7 +18,9 @@ import {
   Tag,
   AlertCircle,
   CheckCircle2,
+  Sliders,
 } from 'lucide-react';
+import { formatRuleCondition } from '@/lib/payee-rules';
 
 interface PayeesTabProps {
   payees: PayeeWithStats[];
@@ -50,6 +52,7 @@ export function PayeesTab({
   // Compute stats
   const totalPayees = payees.length;
   const categorizedCount = payees.filter((p) => Boolean(p.defaultCategoryId)).length;
+  const rulesCount = payees.filter((p) => p.rules && p.rules.length > 0).length;
   const uncategorizedCount = totalPayees - categorizedCount;
 
   // Filter & sort payees
@@ -62,12 +65,19 @@ export function PayeesTab({
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.defaultCategoryName?.toLowerCase().includes(q) ||
-          p.parentCategoryName?.toLowerCase().includes(q)
+          p.parentCategoryName?.toLowerCase().includes(q) ||
+          p.rules?.some(
+            (r) =>
+              r.categoryName?.toLowerCase().includes(q) ||
+              r.parentCategoryName?.toLowerCase().includes(q)
+          )
       );
     }
 
     if (filterCategory === 'categorized') {
       result = result.filter((p) => Boolean(p.defaultCategoryId));
+    } else if (filterCategory === 'has-rules') {
+      result = result.filter((p) => p.rules && p.rules.length > 0);
     } else if (filterCategory === 'uncategorized') {
       result = result.filter((p) => !p.defaultCategoryId);
     } else if (filterCategory !== 'all') {
@@ -91,7 +101,7 @@ export function PayeesTab({
   return (
     <div className="space-y-6">
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
@@ -128,9 +138,31 @@ export function PayeesTab({
           </div>
           {uncategorizedCount > 0 && (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              {uncategorizedCount} {uncategorizedCount === 1 ? 'payee needs' : 'payees need'} a default category
+              {uncategorizedCount} {uncategorizedCount === 1 ? 'payee needs' : 'payees need'} a default
             </p>
           )}
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Amount Rules
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+              <Sliders className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {rulesCount}
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {rulesCount === 1 ? 'payee has rules' : 'payees have rules'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Closest threshold wins
+          </p>
         </div>
       </div>
 
@@ -142,7 +174,7 @@ export function PayeesTab({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search payees by name or category..."
+            placeholder="Search payees by name, category, or rule..."
             className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm text-zinc-800 placeholder-zinc-400 shadow-xs focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:placeholder-zinc-500"
           />
         </div>
@@ -156,6 +188,7 @@ export function PayeesTab({
           >
             <option value="all">All Categories</option>
             <option value="categorized">Categorized Only</option>
+            <option value="has-rules">With Amount Rules</option>
             <option value="uncategorized">No Default Category</option>
             {flatCategories.map((cat) => {
               const indent = '  '.repeat(cat.depth);
@@ -266,7 +299,35 @@ export function PayeesTab({
                             <span>No default category</span>
                           </span>
                         )}
+                        {payee.rules && payee.rules.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                            <Sliders className="h-3 w-3" />
+                            <span>
+                              {payee.rules.length} {payee.rules.length === 1 ? 'rule' : 'rules'}
+                            </span>
+                          </span>
+                        )}
                       </div>
+
+                      {/* Amount Rules Chips */}
+                      {payee.rules && payee.rules.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                          {payee.rules.map((r, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60"
+                            >
+                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                {formatRuleCondition(r.operator, r.amountCents)}
+                              </span>
+                              <span className="text-zinc-400">➔</span>
+                              <span className="font-sans text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-[150px]">
+                                {r.categoryName || 'Category'}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

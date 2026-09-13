@@ -68,6 +68,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
     relationName: 'categoryHierarchy',
   }),
   transactions: many(transactions),
+  payeeRules: many(payeeRules),
 }));
 
 export const payees = sqliteTable('payees', {
@@ -81,12 +82,40 @@ export const payees = sqliteTable('payees', {
     .$defaultFn(() => new Date()),
 });
 
+export const payeeRules = sqliteTable('payee_rules', {
+  id: text('id').primaryKey(),
+  payeeId: text('payee_id')
+    .notNull()
+    .references(() => payees.id, { onDelete: 'cascade' }),
+  categoryId: text('category_id')
+    .notNull()
+    .references(() => categories.id, { onDelete: 'cascade' }),
+  operator: text('operator', { enum: ['lte', 'gte'] }).notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const payeeRulesRelations = relations(payeeRules, ({ one }) => ({
+  payee: one(payees, {
+    fields: [payeeRules.payeeId],
+    references: [payees.id],
+  }),
+  category: one(categories, {
+    fields: [payeeRules.categoryId],
+    references: [categories.id],
+  }),
+}));
+
 export const payeesRelations = relations(payees, ({ one, many }) => ({
   defaultCategory: one(categories, {
     fields: [payees.defaultCategoryId],
     references: [categories.id],
   }),
   transactions: many(transactions),
+  rules: many(payeeRules),
 }));
 
 export const transactions = sqliteTable('transactions', {
@@ -130,5 +159,8 @@ export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type Payee = typeof payees.$inferSelect;
+export type PayeeRule = typeof payeeRules.$inferSelect;
+export type NewPayeeRule = typeof payeeRules.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+

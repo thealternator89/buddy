@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 interface CurrencyInputProps {
   valueCents: number;
   onChangeCents: (cents: number) => void;
+  onBlur?: () => void;
   id?: string;
   placeholder?: string;
   autoFocus?: boolean;
@@ -17,6 +18,7 @@ interface CurrencyInputProps {
 export function CurrencyInput({
   valueCents,
   onChangeCents,
+  onBlur,
   id,
   placeholder = '0.00',
   autoFocus,
@@ -55,6 +57,7 @@ export function CurrencyInput({
         required={required}
         value={displayValue}
         onChange={handleChange}
+        onBlur={onBlur}
         placeholder={placeholder}
         className={cn(
           'w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-8 pr-4 text-xl font-bold text-zinc-900 shadow-xs focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100',

@@ -84,6 +84,22 @@ const sqlite =
         `);
         client.pragma('foreign_keys = ON');
       }
+
+      // 3. Payee rules table auto-migration
+      client.exec(`
+        CREATE TABLE IF NOT EXISTS \`payee_rules\` (
+          \`id\` text PRIMARY KEY NOT NULL,
+          \`payee_id\` text NOT NULL,
+          \`category_id\` text NOT NULL,
+          \`operator\` text NOT NULL,
+          \`amount_cents\` integer NOT NULL,
+          \`sort_order\` integer DEFAULT 0 NOT NULL,
+          \`created_at\` integer NOT NULL,
+          FOREIGN KEY (\`payee_id\`) REFERENCES \`payees\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (\`category_id\`) REFERENCES \`categories\`(\`id\`) ON UPDATE no action ON DELETE cascade
+        );
+        CREATE INDEX IF NOT EXISTS \`idx_payee_rules_payee_id\` ON \`payee_rules\`(\`payee_id\`);
+      `);
     } catch (e) {
       console.error('Database auto-migration note:', e);
     }

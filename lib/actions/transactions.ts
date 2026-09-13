@@ -1,13 +1,22 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { accounts, categories, payees, transactions } from '@/lib/db/schema';
+import { accounts, categories, payees, transactions, payeeRules } from '@/lib/db/schema';
 import { getOrCreatePayee } from './payees';
 import { getCategorySubtreeIds } from './categories';
-import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
+import { resolvePayeeCategory, RuleOperator } from '@/lib/payee-rules';
+import { and, asc, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
+
+function safeRevalidatePath(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // Ignore outside request context
+  }
+}
 
 export interface TransactionWithDetails {
   id: string;
@@ -189,9 +198,43 @@ export async function createTransaction(input: CreateTransactionInput) {
   } else {
     // Normal transaction
     let payeeId: string | null = null;
+    let finalCategoryId = input.categoryId || null;
+
     if (input.payeeName && input.payeeName.trim()) {
       const payee = await getOrCreatePayee(input.payeeName.trim(), input.categoryId || undefined);
-      if (payee) payeeId = payee.id;
+      if (payee) {
+        payeeId = payee.id;
+        if (!finalCategoryId) {
+          const rules = await db
+            .select({
+              id: payeeRules.id,
+              payeeId: payeeRules.payeeId,
+              categoryId: payeeRules.categoryId,
+              operator: payeeRules.operator,
+              amountCents: payeeRules.amountCents,
+              sortOrder: payeeRules.sortOrder,
+            })
+            .from(payeeRules)
+            .where(eq(payeeRules.payeeId, payee.id))
+            .orderBy(asc(payeeRules.sortOrder), asc(payeeRules.amountCents));
+
+          const match = resolvePayeeCategory(
+            {
+              id: payee.id,
+              name: payee.name,
+              defaultCategoryId: payee.defaultCategoryId,
+              rules: rules.map((r) => ({
+                ...r,
+                operator: r.operator as RuleOperator,
+              })),
+            },
+            input.amountCents
+          );
+          if (match) {
+            finalCategoryId = match.categoryId;
+          }
+        }
+      }
     }
 
     db.insert(transactions)
@@ -199,7 +242,7 @@ export async function createTransaction(input: CreateTransactionInput) {
         id: crypto.randomUUID(),
         accountId: input.accountId,
         payeeId,
-        categoryId: input.categoryId || null,
+        categoryId: finalCategoryId,
         amountCents: input.amountCents,
         date: input.date,
         notes: input.notes || null,
@@ -208,9 +251,9 @@ export async function createTransaction(input: CreateTransactionInput) {
       .run();
   }
 
-  revalidatePath('/');
-  revalidatePath('/transactions');
-  revalidatePath('/accounts');
+  safeRevalidatePath('/');
+  safeRevalidatePath('/transactions');
+  safeRevalidatePath('/accounts');
   return { success: true };
 }
 
@@ -291,9 +334,9 @@ export async function updateTransaction(
       .run();
   }
 
-  revalidatePath('/');
-  revalidatePath('/transactions');
-  revalidatePath('/accounts');
+  safeRevalidatePath('/');
+  safeRevalidatePath('/transactions');
+  safeRevalidatePath('/accounts');
   return { success: true };
 }
 
@@ -316,9 +359,9 @@ export async function deleteTransaction(id: string) {
     db.delete(transactions).where(eq(transactions.id, id)).run();
   }
 
-  revalidatePath('/');
-  revalidatePath('/transactions');
-  revalidatePath('/accounts');
+  safeRevalidatePath('/');
+  safeRevalidatePath('/transactions');
+  safeRevalidatePath('/accounts');
   return { success: true };
 }
 
@@ -336,6 +379,6 @@ export async function toggleTransactionCleared(id: string) {
     .where(eq(transactions.id, id))
     .run();
 
-  revalidatePath('/transactions');
+  safeRevalidatePath('/transactions');
   return { success: true };
 }
