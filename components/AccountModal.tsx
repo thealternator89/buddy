@@ -13,15 +13,25 @@ interface AccountModalProps {
   onClose: () => void;
   account?: AccountWithBalance | null;
   groups?: { id: string; name: string; icon?: string | null }[];
+  defaultGroupId?: string | null;
   onDelete?: (account: AccountWithBalance) => void;
 }
 
-export function AccountModal({ isOpen, onClose, account, groups = [], onDelete }: AccountModalProps) {
+export function AccountModal({
+  isOpen,
+  onClose,
+  account,
+  groups = [],
+  defaultGroupId,
+  onDelete,
+}: AccountModalProps) {
   const isEditing = Boolean(account);
 
   const [name, setName] = useState(account?.name || '');
   const [type, setType] = useState<AccountType>(account?.type || 'checking');
-  const [groupId, setGroupId] = useState<string | null>(account?.groupId ?? null);
+  const [groupId, setGroupId] = useState<string | null>(
+    account ? (account.groupId ?? null) : (defaultGroupId ?? null)
+  );
   const [icon, setIcon] = useState<string | null>(account?.icon ?? null);
   const [excludeFromNetWorth, setExcludeFromNetWorth] = useState(
     Boolean(account?.excludeFromNetWorth)
