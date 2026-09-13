@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { Payee } from '@/lib/db/schema';
 import { createTransaction } from '@/lib/actions/transactions';
 import { APP_CONFIG } from '@/lib/constants';
@@ -16,7 +16,7 @@ interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   accounts: AccountWithBalance[];
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   payees: Payee[];
   defaultAccountId?: string;
 }
@@ -27,7 +27,7 @@ export function TransactionModal({
   isOpen,
   onClose,
   accounts,
-  categoryGroups,
+  categories,
   payees,
   defaultAccountId,
 }: TransactionModalProps) {
@@ -283,7 +283,7 @@ export function TransactionModal({
                 </label>
                 <div className="mt-1">
                   <CategoryCombobox
-                    categoryGroups={categoryGroups}
+                    categories={categories}
                     value={categoryId}
                     onChange={setCategoryId}
                   />

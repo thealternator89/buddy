@@ -15,16 +15,16 @@ import { APP_CONFIG } from '@/lib/constants';
 import { useState } from 'react';
 import { TransactionModal } from './TransactionModal';
 import { AccountWithBalance } from '@/lib/actions/accounts';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { Payee } from '@/lib/db/schema';
 
 interface NavbarProps {
   accounts?: AccountWithBalance[];
-  categoryGroups?: CategoryGroupWithChildren[];
+  categories?: (CategoryNode | CategoryFlatItem)[];
   payees?: Payee[];
 }
 
-export function Navbar({ accounts = [], categoryGroups = [], payees = [] }: NavbarProps) {
+export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarProps) {
   const pathname = usePathname();
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
 
@@ -125,7 +125,7 @@ export function Navbar({ accounts = [], categoryGroups = [], payees = [] }: Navb
           isOpen={isTxModalOpen}
           onClose={() => setIsTxModalOpen(false)}
           accounts={accounts}
-          categoryGroups={categoryGroups}
+          categories={categories}
           payees={payees}
         />
       )}

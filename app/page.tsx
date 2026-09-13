@@ -233,6 +233,7 @@ export default async function DashboardPage() {
                               <>
                                 <span>•</span>
                                 <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                                  {tx.parentCategoryName ? `${tx.parentCategoryName} › ` : ''}
                                   {tx.categoryName}
                                 </span>
                               </>

@@ -5,14 +5,14 @@ import { TransactionTable } from './TransactionTable';
 import { TransactionModal } from './TransactionModal';
 import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { AccountWithBalance } from '@/lib/actions/accounts';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { Payee } from '@/lib/db/schema';
 import { PlusCircle } from 'lucide-react';
 
 interface TransactionsClientViewProps {
   transactions: TransactionWithDetails[];
   accounts: AccountWithBalance[];
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   payees: Payee[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
@@ -23,7 +23,7 @@ interface TransactionsClientViewProps {
 export function TransactionsClientView({
   transactions,
   accounts,
-  categoryGroups,
+  categories,
   payees,
   selectedAccountId,
   selectedCategoryId,
@@ -56,7 +56,7 @@ export function TransactionsClientView({
       <TransactionTable
         initialTransactions={transactions}
         accounts={accounts}
-        categoryGroups={categoryGroups}
+        categories={categories}
         payees={payees}
         selectedAccountId={selectedAccountId}
         selectedCategoryId={selectedCategoryId}
@@ -69,7 +69,7 @@ export function TransactionsClientView({
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           accounts={accounts}
-          categoryGroups={categoryGroups}
+          categories={categories}
           payees={payees}
           defaultAccountId={selectedAccountId}
         />

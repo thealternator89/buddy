@@ -3,7 +3,11 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { PayeeWithStats } from '@/lib/actions/payees';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import {
+  CategoryNode,
+  CategoryFlatItem,
+  flattenCategoryTree,
+} from '@/lib/category-utils';
 import {
   Building2,
   Search,
@@ -18,7 +22,7 @@ import {
 
 interface PayeesTabProps {
   payees: PayeeWithStats[];
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   onNewPayee: () => void;
   onEditPayee: (payee: PayeeWithStats) => void;
   onDeletePayee: (payee: PayeeWithStats) => void;
@@ -26,7 +30,7 @@ interface PayeesTabProps {
 
 export function PayeesTab({
   payees,
-  categoryGroups,
+  categories: inputCategories,
   onNewPayee,
   onEditPayee,
   onDeletePayee,
@@ -34,6 +38,14 @@ export function PayeesTab({
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc'>('name-asc');
+
+  const flatCategories = useMemo<CategoryFlatItem[]>(() => {
+    if (inputCategories.length === 0) return [];
+    if ('children' in inputCategories[0]) {
+      return flattenCategoryTree(inputCategories as CategoryNode[]);
+    }
+    return inputCategories as CategoryFlatItem[];
+  }, [inputCategories]);
 
   // Compute stats
   const totalPayees = payees.length;
@@ -50,7 +62,7 @@ export function PayeesTab({
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.defaultCategoryName?.toLowerCase().includes(q) ||
-          p.defaultCategoryGroupName?.toLowerCase().includes(q)
+          p.parentCategoryName?.toLowerCase().includes(q)
       );
     }
 
@@ -140,20 +152,20 @@ export function PayeesTab({
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 font-mono"
           >
             <option value="all">All Categories</option>
             <option value="categorized">Categorized Only</option>
             <option value="uncategorized">No Default Category</option>
-            {categoryGroups.map((group) => (
-              <optgroup key={group.id} label={group.name}>
-                {group.categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
+            {flatCategories.map((cat) => {
+              const indent = '  '.repeat(cat.depth);
+              const prefix = cat.depth > 0 ? '↳ ' : '● ';
+              return (
+                <option key={cat.id} value={cat.id}>
+                  {indent}{prefix}{cat.name}
+                </option>
+              );
+            })}
           </select>
 
           {/* Sort Filter */}
@@ -242,8 +254,8 @@ export function PayeesTab({
                           <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                             <Tag className="h-3 w-3" />
                             <span>
-                              {payee.defaultCategoryGroupName
-                                ? `${payee.defaultCategoryGroupName} › `
+                              {payee.parentCategoryName
+                                ? `${payee.parentCategoryName} › `
                                 : ''}
                               {payee.defaultCategoryName}
                             </span>

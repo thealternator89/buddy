@@ -1,8 +1,9 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { payees, categories, categoryGroups, transactions } from '@/lib/db/schema';
+import { payees, categories, transactions } from '@/lib/db/schema';
 import { and, asc, eq, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -11,7 +12,7 @@ export interface PayeeWithStats {
   name: string;
   defaultCategoryId: string | null;
   defaultCategoryName: string | null;
-  defaultCategoryGroupName: string | null;
+  parentCategoryName: string | null;
   transactionCount: number;
   totalSpentCents: number;
   totalReceivedCents: number;
@@ -24,18 +25,20 @@ export async function getPayees() {
 }
 
 export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
+  const parentCategories = alias(categories, 'parent_categories');
+
   const allPayees = await db
     .select({
       id: payees.id,
       name: payees.name,
       defaultCategoryId: payees.defaultCategoryId,
       defaultCategoryName: categories.name,
-      defaultCategoryGroupName: categoryGroups.name,
+      parentCategoryName: parentCategories.name,
       createdAt: payees.createdAt,
     })
     .from(payees)
     .leftJoin(categories, eq(payees.defaultCategoryId, categories.id))
-    .leftJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
+    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
     .orderBy(asc(payees.name));
 
   const txStats = await db
@@ -77,7 +80,7 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       name: p.name,
       defaultCategoryId: p.defaultCategoryId,
       defaultCategoryName: p.defaultCategoryName || null,
-      defaultCategoryGroupName: p.defaultCategoryGroupName || null,
+      parentCategoryName: p.parentCategoryName || null,
       transactionCount: stats.count,
       totalSpentCents: stats.totalSpent,
       totalReceivedCents: stats.totalReceived,

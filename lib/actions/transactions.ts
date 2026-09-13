@@ -1,9 +1,11 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { accounts, categories, categoryGroups, payees, transactions } from '@/lib/db/schema';
+import { accounts, categories, payees, transactions } from '@/lib/db/schema';
 import { getOrCreatePayee } from './payees';
-import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm';
+import { getCategorySubtreeIds } from './categories';
+import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -15,7 +17,7 @@ export interface TransactionWithDetails {
   payeeName: string | null;
   categoryId: string | null;
   categoryName: string | null;
-  groupName: string | null;
+  parentCategoryName: string | null;
   amountCents: number;
   date: string;
   notes: string | null;
@@ -44,7 +46,8 @@ export async function getTransactions(
     conditions.push(eq(transactions.accountId, filters.accountId));
   }
   if (filters.categoryId) {
-    conditions.push(eq(transactions.categoryId, filters.categoryId));
+    const subtreeIds = await getCategorySubtreeIds(filters.categoryId);
+    conditions.push(inArray(transactions.categoryId, subtreeIds));
   }
   if (filters.payeeId) {
     conditions.push(eq(transactions.payeeId, filters.payeeId));
@@ -56,6 +59,8 @@ export async function getTransactions(
     conditions.push(lte(transactions.date, filters.endDate));
   }
 
+  const parentCategories = alias(categories, 'parent_categories');
+
   // Base query with joins
   const query = db
     .select({
@@ -66,7 +71,7 @@ export async function getTransactions(
       payeeName: payees.name,
       categoryId: transactions.categoryId,
       categoryName: categories.name,
-      groupName: categoryGroups.name,
+      parentCategoryName: parentCategories.name,
       amountCents: transactions.amountCents,
       date: transactions.date,
       notes: transactions.notes,
@@ -78,7 +83,7 @@ export async function getTransactions(
     .innerJoin(accounts, eq(transactions.accountId, accounts.id))
     .leftJoin(payees, eq(transactions.payeeId, payees.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
+    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
     .orderBy(desc(transactions.date), desc(transactions.createdAt));
 
   let results =

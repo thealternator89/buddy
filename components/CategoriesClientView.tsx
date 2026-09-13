@@ -2,71 +2,231 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import {
-  CategoryGroupWithStats,
-  archiveCategory,
-} from '@/lib/actions/categories';
-import { CategoryModal } from './CategoryModal';
+import { archiveCategory } from '@/lib/actions/categories';
+import { CategoryNode, flattenCategoryTree } from '@/lib/category-utils';
+import { CategoryModal, EditCategoryData } from './CategoryModal';
+import { formatCurrency } from '@/lib/utils/currency';
 import {
   PlusCircle,
+  FolderTree,
   Tag,
-  Folder,
   ArrowRight,
   Pencil,
   Archive,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  Plus,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface CategoriesClientViewProps {
-  groups: CategoryGroupWithStats[];
+  categoryTree: CategoryNode[];
   showHeader?: boolean;
 }
 
 export function CategoriesClientView({
-  groups,
+  categoryTree,
   showHeader = true,
 }: CategoriesClientViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editItem, setEditItem] = useState<{
-    id: string;
-    name: string;
-    groupId?: string;
-    mode: 'category' | 'group';
-  } | null>(null);
+  const [editItem, setEditItem] = useState<EditCategoryData | null>(null);
+  const [defaultParentId, setDefaultParentId] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  const handleOpenNew = () => {
+  const flatCategories = flattenCategoryTree(categoryTree);
+  const totalCategories = flatCategories.length;
+  const rootCategoriesCount = categoryTree.length;
+  const totalOverallSpent = categoryTree.reduce((acc, root) => acc + root.totalSpentCents, 0);
+
+  const toggleCollapse = (id: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleOpenNewRoot = () => {
     setEditItem(null);
+    setDefaultParentId(null);
     setIsModalOpen(true);
   };
 
-  const handleEditCategory = (cat: { id: string; name: string; groupId: string }) => {
+  const handleAddSubcategory = (parentId: string) => {
+    setEditItem(null);
+    setDefaultParentId(parentId);
+    setIsModalOpen(true);
+  };
+
+  const handleEditCategory = (node: CategoryNode) => {
     setEditItem({
-      id: cat.id,
-      name: cat.name,
-      groupId: cat.groupId,
-      mode: 'category',
+      id: node.id,
+      name: node.name,
+      parentId: node.parentId,
     });
+    setDefaultParentId(null);
     setIsModalOpen(true);
   };
 
-  const handleEditGroup = (group: { id: string; name: string }) => {
-    setEditItem({
-      id: group.id,
-      name: group.name,
-      mode: 'group',
-    });
-    setIsModalOpen(true);
-  };
+  const handleArchiveCategory = (node: CategoryNode) => {
+    const hasChildren = node.children.length > 0;
+    const msg = hasChildren
+      ? `Are you sure you want to archive "${node.name}" and all ${node.children.length} of its subcategories? They will no longer appear in category selectors.`
+      : `Are you sure you want to archive "${node.name}"? It will no longer appear in category selectors.`;
 
-  const handleArchiveCategory = (catId: string, catName: string) => {
-    if (confirm(`Are you sure you want to archive "${catName}"? It will no longer appear in category selectors.`)) {
+    if (confirm(msg)) {
       startTransition(async () => {
-        await archiveCategory(catId);
+        await archiveCategory(node.id);
       });
     }
   };
 
-  const totalCategories = groups.reduce((acc, g) => acc + g.categories.length, 0);
+  // Render a node and its recursive children
+  const renderNode = (node: CategoryNode) => {
+    const hasChildren = node.children.length > 0;
+    const isCollapsed = collapsedIds.has(node.id);
+    const isRoot = node.depth === 0;
+
+    return (
+      <div key={node.id} className="relative">
+        <div
+          className={cn(
+            'group flex items-center justify-between py-3 px-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40',
+            isRoot
+              ? 'border-t border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900'
+              : 'border-t border-zinc-100/60 dark:border-zinc-800/40 bg-zinc-50/25 dark:bg-zinc-900/25'
+          )}
+          style={{ paddingLeft: `${node.depth * 24 + 16}px` }}
+        >
+          {/* Left section: expand toggle, icon, name & badges */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => toggleCollapse(node.id)}
+                className="p-1 -ml-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 rounded transition-colors"
+                title={isCollapsed ? 'Expand subcategories' : 'Collapse subcategories'}
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-6 shrink-0" />
+            )}
+
+            <div
+              className={cn(
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs',
+                isRoot
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+              )}
+            >
+              {isRoot ? (
+                <Folder className="h-3.5 w-3.5" />
+              ) : (
+                <Tag className="h-3.5 w-3.5" />
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'truncate text-sm',
+                    isRoot
+                      ? 'font-bold text-zinc-900 dark:text-zinc-100'
+                      : hasChildren
+                      ? 'font-semibold text-zinc-800 dark:text-zinc-200'
+                      : 'font-medium text-zinc-700 dark:text-zinc-300'
+                  )}
+                >
+                  {node.name}
+                </span>
+
+                {hasChildren && (
+                  <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                    {node.children.length} {node.children.length === 1 ? 'sub' : 'subs'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right section: financial telemetry & row actions */}
+          <div className="flex items-center gap-4 shrink-0">
+            {/* Spending stats */}
+            <div className="text-right">
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {formatCurrency(node.totalSpentCents)}
+              </div>
+              <div className="flex items-center justify-end gap-1 text-[11px] text-zinc-400">
+                {hasChildren && node.directSpentCents > 0 && (
+                  <span>({formatCurrency(node.directSpentCents)} direct) • </span>
+                )}
+                <span>{node.totalTransactionCount} txns</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+              <Link
+                href={`/transactions?category=${node.id}`}
+                className="rounded-md p-1.5 text-zinc-400 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 transition-colors"
+                title={`View transactions for ${node.name}`}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => handleAddSubcategory(node.id)}
+                className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600 dark:hover:bg-zinc-800 dark:hover:text-emerald-400 transition-colors"
+                title={`Add subcategory under ${node.name}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleEditCategory(node)}
+                className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+                title="Edit category"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleArchiveCategory(node)}
+                disabled={isPending}
+                className="rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
+                title="Archive category"
+              >
+                <Archive className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Children (if expanded) */}
+        {hasChildren && !isCollapsed && (
+          <div className="relative">
+            {node.children.map((child) => renderNode(child))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -77,26 +237,26 @@ export function CategoriesClientView({
               Categories
             </h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-              Organize transactions into groups and manage categories.
+              Organize transactions in a multi-level category tree with rolled-up spending insights.
             </p>
           </div>
 
           <button
-            onClick={handleOpenNew}
+            onClick={handleOpenNewRoot}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors self-start sm:self-auto"
           >
             <PlusCircle className="h-4 w-4" />
-            <span>New Category / Group</span>
+            <span>New Root Category</span>
           </button>
         </div>
       )}
 
-      {/* Overview Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Category Groups
+              Top-Level Categories
             </span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
               <Folder className="h-4 w-4" />
@@ -104,9 +264,9 @@ export function CategoriesClientView({
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {groups.length}
+              {rootCategoriesCount}
             </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">groups</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">root groups</span>
           </div>
         </div>
 
@@ -123,96 +283,80 @@ export function CategoriesClientView({
             <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               {totalCategories}
             </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">active categories</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">across all levels</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Total Tracked Spend
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+              <FolderTree className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {formatCurrency(totalOverallSpent)}
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">categorized</span>
           </div>
         </div>
       </div>
 
-      {/* Group Cards */}
-      <div className="space-y-6">
-        {groups.map((group) => (
-          <div
-            key={group.id}
-            className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
-          >
-            {/* Group Header */}
-            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/75 px-5 py-3.5 dark:border-zinc-800 dark:bg-zinc-900/50">
-              <div className="flex items-center gap-2.5">
-                <Folder className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="font-bold text-zinc-900 text-sm sm:text-base dark:text-zinc-100">
-                  {group.name}
-                </h3>
-                <button
-                  onClick={() => handleEditGroup(group)}
-                  className="rounded-md p-1 text-zinc-400 hover:bg-zinc-200/60 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
-                  title="Edit Group Name"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="font-medium text-zinc-700 dark:text-zinc-300">
-                  {group.categories.length} {group.categories.length === 1 ? 'category' : 'categories'}
-                </span>
-              </div>
-            </div>
-
-            {/* Categories List */}
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-              {group.categories.length === 0 ? (
-                <div className="p-4 text-xs text-zinc-400">No categories in this group yet.</div>
-              ) : (
-                group.categories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className="flex items-center justify-between px-5 py-3 hover:bg-zinc-50/75 transition-colors dark:hover:bg-zinc-800/40 text-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Tag className="h-3.5 w-3.5 text-zinc-400" />
-                      <span className="font-medium text-zinc-800 dark:text-zinc-200">{cat.name}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <Link
-                        href={`/transactions?category=${cat.id}`}
-                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5 px-2 py-1 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                      >
-                        Transactions <ArrowRight className="h-3 w-3" />
-                      </Link>
-
-                      <div className="flex items-center gap-1 border-l border-zinc-100 pl-2 dark:border-zinc-800">
-                        <button
-                          onClick={() => handleEditCategory(cat)}
-                          className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
-                          title="Edit Category"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleArchiveCategory(cat.id, cat.name)}
-                          disabled={isPending}
-                          className="rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
-                          title="Archive Category"
-                        >
-                          <Archive className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+      {/* Main Category Tree Explorer */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Table/Tree Header */}
+        <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/75 px-5 py-3.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            <FolderTree className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Category Hierarchy</span>
           </div>
-        ))}
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCollapsedIds(new Set())}
+              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              Expand All
+            </button>
+            <span className="text-zinc-300 dark:text-zinc-700">•</span>
+            <button
+              type="button"
+              onClick={() => setCollapsedIds(new Set(categoryTree.map((r) => r.id)))}
+              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              Collapse Roots
+            </button>
+          </div>
+        </div>
+
+        {/* Tree Content */}
+        {categoryTree.length === 0 ? (
+          <div className="py-12 text-center text-zinc-400">
+            No categories defined yet. Click &quot;New Root Category&quot; to get started.
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {categoryTree.map((root) => renderNode(root))}
+          </div>
+        )}
       </div>
 
+      {/* Modal for Creating / Editing Categories */}
       {isModalOpen && (
         <CategoryModal
-          key={editItem ? editItem.id : 'new'}
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          categoryGroups={groups}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditItem(null);
+            setDefaultParentId(null);
+          }}
+          categories={flatCategories}
           editItem={editItem}
+          defaultParentId={defaultParentId}
         />
       )}
     </div>

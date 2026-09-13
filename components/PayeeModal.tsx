@@ -1,23 +1,35 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { X, Building2 } from 'lucide-react';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import {
+  CategoryNode,
+  CategoryFlatItem,
+  flattenCategoryTree,
+} from '@/lib/category-utils';
 import { PayeeWithStats, createPayee, updatePayee } from '@/lib/actions/payees';
 
 interface PayeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   payee?: PayeeWithStats | null;
 }
 
-export function PayeeModal({ isOpen, onClose, categoryGroups, payee }: PayeeModalProps) {
+export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee }: PayeeModalProps) {
   const isEditing = Boolean(payee);
   const [name, setName] = useState(payee?.name || '');
   const [defaultCategoryId, setDefaultCategoryId] = useState(payee?.defaultCategoryId || '');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const flatCategories = useMemo<CategoryFlatItem[]>(() => {
+    if (inputCategories.length === 0) return [];
+    if ('children' in inputCategories[0]) {
+      return flattenCategoryTree(inputCategories as CategoryNode[]);
+    }
+    return inputCategories as CategoryFlatItem[];
+  }, [inputCategories]);
 
   if (!isOpen) return null;
 
@@ -103,21 +115,21 @@ export function PayeeModal({ isOpen, onClose, categoryGroups, payee }: PayeeModa
             <select
               value={defaultCategoryId}
               onChange={(e) => setDefaultCategoryId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-mono"
             >
               <option value="">None (Unassigned)</option>
-              {categoryGroups.map((group) => (
-                <optgroup key={group.id} label={group.name}>
-                  {group.categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              {flatCategories.map((cat) => {
+                const indent = '  '.repeat(cat.depth);
+                const prefix = cat.depth > 0 ? '↳ ' : '● ';
+                return (
+                  <option key={cat.id} value={cat.id}>
+                    {indent}{prefix}{cat.name}
+                  </option>
+                );
+              })}
             </select>
             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              Transactions recorded for this payee will automatically suggest this category.
+              Transactions recorded for this payee will automatically suggest this category. You can choose any parent or child category.
             </p>
           </div>
 

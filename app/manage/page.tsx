@@ -1,4 +1,4 @@
-import { getCategoryGroupsWithStats } from '@/lib/actions/categories';
+import { getCategoryTree } from '@/lib/actions/categories';
 import { getPayeesWithStats } from '@/lib/actions/payees';
 import { ManageClientView } from '@/components/ManageClientView';
 
@@ -15,14 +15,14 @@ export default async function ManagePage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const initialTab = resolvedParams.tab === 'payees' ? 'payees' : 'categories';
 
-  const [categoryGroups, payees] = await Promise.all([
-    getCategoryGroupsWithStats(),
+  const [categoryTree, payees] = await Promise.all([
+    getCategoryTree(),
     getPayeesWithStats(),
   ]);
 
   return (
     <ManageClientView
-      categoryGroups={categoryGroups}
+      categoryTree={categoryTree}
       payees={payees}
       initialTab={initialTab}
     />

@@ -1,6 +1,6 @@
 import { getTransactions } from '@/lib/actions/transactions';
 import { getAccountsWithBalances } from '@/lib/actions/accounts';
-import { getCategoryGroupsWithCategories } from '@/lib/actions/categories';
+import { getFlatCategories } from '@/lib/actions/categories';
 import { getPayees } from '@/lib/actions/payees';
 import { TransactionsClientView } from '@/components/TransactionsClientView';
 
@@ -19,10 +19,10 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
   const payeeId = typeof resolvedParams.payee === 'string' ? resolvedParams.payee : undefined;
   const search = typeof resolvedParams.search === 'string' ? resolvedParams.search : undefined;
 
-  const [transactions, accounts, categoryGroups, payees] = await Promise.all([
+  const [transactions, accounts, categories, payees] = await Promise.all([
     getTransactions({ accountId, categoryId, payeeId, search }),
     getAccountsWithBalances(),
-    getCategoryGroupsWithCategories(),
+    getFlatCategories(),
     getPayees(),
   ]);
 
@@ -30,7 +30,7 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
     <TransactionsClientView
       transactions={transactions}
       accounts={accounts}
-      categoryGroups={categoryGroups}
+      categories={categories}
       payees={payees}
       selectedAccountId={accountId}
       selectedCategoryId={categoryId}

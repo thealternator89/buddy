@@ -1,22 +1,27 @@
 'use client';
 
-import { useState, useRef, useEffect, useTransition } from 'react';
-import { CategoryGroupWithChildren, createCategory } from '@/lib/actions/categories';
-import { Search, Plus, Check, ChevronDown, X, Folder, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect, useTransition, useMemo } from 'react';
+import { createCategory } from '@/lib/actions/categories';
+import {
+  CategoryNode,
+  CategoryFlatItem,
+  flattenCategoryTree,
+} from '@/lib/category-utils';
+import { Search, Plus, Check, ChevronDown, X, Folder, Tag, CornerDownRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CategoryComboboxProps {
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   value: string; // selected categoryId
   onChange: (categoryId: string) => void;
   placeholder?: string;
 }
 
 export function CategoryCombobox({
-  categoryGroups,
+  categories: inputCategories,
   value,
   onChange,
-  placeholder = 'Select or create category...',
+  placeholder = 'Select category...',
 }: CategoryComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -24,20 +29,26 @@ export function CategoryCombobox({
   const [isPending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Keep a local copy of groups so newly created categories appear instantly
-  const [prevCategoryGroups, setPrevCategoryGroups] = useState(categoryGroups);
-  const [groups, setGroups] = useState(categoryGroups);
+  // Normalize input into flat items with paths and depth
+  const flatCategories = useMemo<CategoryFlatItem[]>(() => {
+    if (inputCategories.length === 0) return [];
+    // Check if input is CategoryNode[]
+    if ('children' in inputCategories[0]) {
+      return flattenCategoryTree(inputCategories as CategoryNode[]);
+    }
+    return inputCategories as CategoryFlatItem[];
+  }, [inputCategories]);
 
-  if (categoryGroups !== prevCategoryGroups) {
-    setPrevCategoryGroups(categoryGroups);
-    setGroups(categoryGroups);
+  // Local state for optimistic additions
+  const [localCategories, setLocalCategories] = useState(flatCategories);
+  const [prevFlat, setPrevFlat] = useState(flatCategories);
+  if (flatCategories !== prevFlat) {
+    setPrevFlat(flatCategories);
+    setLocalCategories(flatCategories);
   }
 
-  // Find currently selected category
-  const allCategories = groups.flatMap((g) =>
-    g.categories.map((c) => ({ ...c, groupName: g.name }))
-  );
-  const selectedCategory = allCategories.find((c) => c.id === value);
+  // Currently selected category
+  const selectedCategory = localCategories.find((c) => c.id === value);
 
   // Close when clicking outside
   useEffect(() => {
@@ -53,22 +64,17 @@ export function CategoryCombobox({
 
   const trimmedSearch = search.trim().toLowerCase();
 
-  // Filter groups and categories
-  const filteredGroups = groups
-    .map((group) => {
-      const matchingCats = group.categories.filter(
-        (cat) =>
-          cat.name.toLowerCase().includes(trimmedSearch) ||
-          group.name.toLowerCase().includes(trimmedSearch)
-      );
-      return {
-        ...group,
-        categories: matchingCats,
-      };
-    })
-    .filter((group) => group.categories.length > 0);
+  // Search filter
+  const filteredCategories = useMemo(() => {
+    if (!trimmedSearch) return localCategories;
+    return localCategories.filter(
+      (c) =>
+        c.name.toLowerCase().includes(trimmedSearch) ||
+        c.fullPathName.toLowerCase().includes(trimmedSearch)
+    );
+  }, [localCategories, trimmedSearch]);
 
-  const exactCategoryMatch = allCategories.find(
+  const exactMatch = localCategories.find(
     (c) => c.name.toLowerCase() === trimmedSearch
   );
 
@@ -79,37 +85,34 @@ export function CategoryCombobox({
     setCreatingCategoryName(null);
   };
 
-  const handleCreateInGroup = (groupId: string) => {
+  const handleCreateCategory = (parentId: string | null) => {
     if (!creatingCategoryName) return;
     const catName = creatingCategoryName.trim();
 
     startTransition(async () => {
       try {
-        const res = await createCategory(groupId, catName);
+        const res = await createCategory(catName, parentId);
         if (res.success && res.id) {
-          // Optimistically update local group list
-          setGroups((prev) =>
-            prev.map((g) =>
-              g.id === groupId
-                ? {
-                    ...g,
-                    categories: [
-                      ...g.categories,
-                      {
-                        id: res.id,
-                        groupId,
-                        name: catName,
-                        sortOrder: g.categories.length + 1,
-                        isArchived: false,
-                        totalSpentCents: 0,
-                        transactionCount: 0,
-                      },
-                    ],
-                  }
-                : g
-            )
-          );
+          const parent = parentId ? localCategories.find((c) => c.id === parentId) : null;
+          const newDepth = parent ? parent.depth + 1 : 0;
+          const newPath = parent ? [...parent.path, catName] : [catName];
 
+          const newItem: CategoryFlatItem = {
+            id: res.id,
+            name: catName,
+            parentId,
+            sortOrder: 999,
+            depth: newDepth,
+            path: newPath,
+            fullPathName: newPath.join(' > '),
+            hasChildren: false,
+            directSpentCents: 0,
+            totalSpentCents: 0,
+            directTransactionCount: 0,
+            totalTransactionCount: 0,
+          };
+
+          setLocalCategories((prev) => [...prev, newItem]);
           onChange(res.id);
           setIsOpen(false);
           setSearch('');
@@ -135,9 +138,11 @@ export function CategoryCombobox({
         <span className="truncate">
           {selectedCategory ? (
             <span className="flex items-center gap-1.5">
-              <span className="text-zinc-400 text-xs dark:text-zinc-500">
-                {selectedCategory.groupName} /
-              </span>
+              {selectedCategory.depth > 0 && (
+                <span className="text-zinc-400 text-xs dark:text-zinc-500">
+                  {selectedCategory.path.slice(0, -1).join(' / ')} /
+                </span>
+              )}
               <span className="font-medium">{selectedCategory.name}</span>
             </span>
           ) : (
@@ -166,14 +171,17 @@ export function CategoryCombobox({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900 animate-in fade-in zoom-in-95 duration-100 flex flex-col">
-          {/* Sub-view: Group Selection when creating a new category */}
+        <div className="absolute z-50 mt-1 max-h-80 w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900 animate-in fade-in zoom-in-95 duration-100 flex flex-col">
+          {/* Sub-view: Parent Selection when creating a new category */}
           {creatingCategoryName ? (
             <div className="p-3 space-y-2">
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Select Group for &quot;{creatingCategoryName}&quot;
-                </span>
+                <div>
+                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                    Where should &quot;{creatingCategoryName}&quot; live?
+                  </span>
+                  <p className="text-[11px] text-zinc-400">Choose a parent category or make it top-level</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setCreatingCategoryName(null)}
@@ -183,25 +191,42 @@ export function CategoryCombobox({
                 </button>
               </div>
 
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {groups.map((g) => (
+              <div className="max-h-52 overflow-y-auto space-y-1">
+                {/* Top-level Option */}
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleCreateCategory(null)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/50 disabled:opacity-50"
+                >
+                  <Folder className="h-3.5 w-3.5 shrink-0" />
+                  <span>None (Make Top-level Category)</span>
+                  {isPending && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+                </button>
+
+                {/* Existing Categories as Parent */}
+                {localCategories.map((c) => (
                   <button
-                    key={g.id}
+                    key={c.id}
                     type="button"
                     disabled={isPending}
-                    onClick={() => handleCreateInGroup(g.id)}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-zinc-800 hover:bg-emerald-50 hover:text-emerald-900 transition-colors dark:text-zinc-200 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 disabled:opacity-50"
+                    onClick={() => handleCreateCategory(c.id)}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 disabled:opacity-50"
+                    style={{ paddingLeft: `${c.depth * 14 + 12}px` }}
                   >
-                    <Folder className="h-4 w-4 text-zinc-400 shrink-0" />
-                    <span className="truncate">{g.name}</span>
-                    {isPending && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+                    {c.depth > 0 ? (
+                      <CornerDownRight className="h-3 w-3 text-zinc-400 shrink-0" />
+                    ) : (
+                      <Folder className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                    )}
+                    <span className="truncate">{c.name}</span>
                   </button>
                 ))}
               </div>
             </div>
           ) : (
             <>
-              {/* Search input header */}
+              {/* Search input */}
               <div className="p-2 border-b border-zinc-100 dark:border-zinc-800">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
@@ -217,15 +242,15 @@ export function CategoryCombobox({
               </div>
 
               {/* Scrollable list */}
-              <div className="overflow-y-auto max-h-56 p-1 space-y-2">
-                {/* Create Category button if search does not match existing */}
-                {search.trim() && !exactCategoryMatch && (
+              <div className="overflow-y-auto max-h-60 p-1 space-y-0.5">
+                {/* Create Category option */}
+                {search.trim() && !exactMatch && (
                   <button
                     type="button"
                     onClick={() => setCreatingCategoryName(search.trim())}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
                   >
-                    <Plus className="h-4 w-4 shrink-0" />
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
                     <span>
                       Create category &quot;<strong>{search.trim()}</strong>&quot;...
                     </span>
@@ -247,41 +272,52 @@ export function CategoryCombobox({
                   </button>
                 )}
 
-                {/* Grouped Categories */}
-                {filteredGroups.length === 0 && search.trim() && exactCategoryMatch ? null : filteredGroups.length === 0 && search.trim() ? (
+                {/* Category Items */}
+                {filteredCategories.length === 0 && search.trim() && exactMatch ? null : filteredCategories.length === 0 && search.trim() ? (
                   <div className="px-3 py-3 text-center text-xs text-zinc-400">
                     No matching categories found.
                   </div>
                 ) : (
-                  filteredGroups.map((group) => (
-                    <div key={group.id} className="space-y-0.5">
-                      <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                        {group.name}
-                      </div>
+                  filteredCategories.map((cat) => {
+                    const isSelected = value === cat.id;
+                    const isRoot = cat.depth === 0;
 
-                      {group.categories.map((cat) => {
-                        const isSelected = value === cat.id;
-                        return (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => handleSelectCategory(cat.id)}
-                            className={cn(
-                              'flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-xs transition-colors',
-                              isSelected
-                                ? 'bg-emerald-50 text-emerald-900 font-semibold dark:bg-emerald-950/60 dark:text-emerald-200'
-                                : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                            )}
-                          >
-                            <span className="truncate pl-2">{cat.name}</span>
-                            {isSelected && (
-                              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => handleSelectCategory(cat.id)}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-lg py-1.5 pr-3 text-left text-xs transition-colors',
+                          isSelected
+                            ? 'bg-emerald-50 text-emerald-900 font-semibold dark:bg-emerald-950/60 dark:text-emerald-200'
+                            : isRoot
+                            ? 'text-zinc-900 font-medium hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800'
+                            : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                        )}
+                        style={{ paddingLeft: `${cat.depth * 14 + 10}px` }}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {cat.depth > 0 ? (
+                            <CornerDownRight className="h-3 w-3 text-zinc-400 shrink-0" />
+                          ) : (
+                            <Tag className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          )}
+                          <span className="truncate">{cat.name}</span>
+                          {/* If in search mode, display full path breadcrumb */}
+                          {trimmedSearch && cat.depth > 0 && (
+                            <span className="text-[10px] text-zinc-400 truncate">
+                              ({cat.fullPathName})
+                            </span>
+                          )}
+                        </div>
+
+                        {isSelected && (
+                          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </>

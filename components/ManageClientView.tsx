@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CategoryGroupWithStats } from '@/lib/actions/categories';
+import { CategoryNode, flattenCategoryTree } from '@/lib/category-utils';
 import { PayeeWithStats } from '@/lib/actions/payees';
 import { CategoriesClientView } from './CategoriesClientView';
 import { PayeesTab } from './PayeesTab';
@@ -16,13 +16,13 @@ import {
 import { cn } from '@/lib/utils';
 
 interface ManageClientViewProps {
-  categoryGroups: CategoryGroupWithStats[];
+  categoryTree: CategoryNode[];
   payees: PayeeWithStats[];
   initialTab?: 'categories' | 'payees';
 }
 
 export function ManageClientView({
-  categoryGroups,
+  categoryTree,
   payees,
   initialTab = 'categories',
 }: ManageClientViewProps) {
@@ -34,7 +34,8 @@ export function ManageClientView({
   const [editingPayee, setEditingPayee] = useState<PayeeWithStats | null>(null);
   const [deletingPayee, setDeletingPayee] = useState<PayeeWithStats | null>(null);
 
-  const totalCategories = categoryGroups.reduce((acc, g) => acc + g.categories.length, 0);
+  const flatCategories = flattenCategoryTree(categoryTree);
+  const totalCategories = flatCategories.length;
 
   const handleTabChange = (tab: 'categories' | 'payees') => {
     setActiveTab(tab);
@@ -54,7 +55,7 @@ export function ManageClientView({
             Manage
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Organize your categories, spending groups, and payees in one central place.
+            Organize your multi-level categories, spending hierarchies, and payees in one central place.
           </p>
         </div>
 
@@ -65,7 +66,7 @@ export function ManageClientView({
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
             >
               <PlusCircle className="h-4 w-4" />
-              <span>New Category / Group</span>
+              <span>New Category</span>
             </button>
           ) : (
             <button
@@ -95,7 +96,7 @@ export function ManageClientView({
             )}
           >
             <FolderTree className="h-4 w-4" />
-            <span>Categories & Groups</span>
+            <span>Category Tree</span>
             <span
               className={cn(
                 'rounded-full px-2 py-0.5 text-xs font-semibold',
@@ -135,11 +136,11 @@ export function ManageClientView({
 
       {/* Tab Content */}
       {activeTab === 'categories' ? (
-        <CategoriesClientView groups={categoryGroups} showHeader={false} />
+        <CategoriesClientView categoryTree={categoryTree} showHeader={false} />
       ) : (
         <PayeesTab
           payees={payees}
-          categoryGroups={categoryGroups}
+          categories={flatCategories}
           onNewPayee={() => {
             setEditingPayee(null);
             setIsPayeeModalOpen(true);
@@ -159,7 +160,7 @@ export function ManageClientView({
         <CategoryModal
           isOpen={isCategoryModalOpen}
           onClose={() => setIsCategoryModalOpen(false)}
-          categoryGroups={categoryGroups}
+          categories={flatCategories}
         />
       )}
 
@@ -171,7 +172,7 @@ export function ManageClientView({
             setIsPayeeModalOpen(false);
             setEditingPayee(null);
           }}
-          categoryGroups={categoryGroups}
+          categories={flatCategories}
           payee={editingPayee}
         />
       )}

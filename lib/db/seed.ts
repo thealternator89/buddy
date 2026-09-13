@@ -1,5 +1,5 @@
 import { db } from './index';
-import { accounts, categories, categoryGroups, payees, transactions } from './schema';
+import { accounts, categories, payees, transactions } from './schema';
 import crypto from 'crypto';
 
 export async function seed() {
@@ -9,72 +9,82 @@ export async function seed() {
   db.delete(transactions).run();
   db.delete(payees).run();
   db.delete(categories).run();
-  db.delete(categoryGroups).run();
   db.delete(accounts).run();
 
-  // 1. Category Groups
-  const groupEssentialsId = crypto.randomUUID();
-  const groupLifestyleId = crypto.randomUUID();
-  const groupIncomeId = crypto.randomUUID();
-
-  db.insert(categoryGroups).values([
-    { id: groupEssentialsId, name: 'Essentials', sortOrder: 1 },
-    { id: groupLifestyleId, name: 'Lifestyle & Discretionary', sortOrder: 2 },
-    { id: groupIncomeId, name: 'Income', sortOrder: 3 },
-  ]).run();
-
-  // 2. Categories
+  // 1. Category Tree Hierarchy
+  // Level 1: Root Categories
   const catGroceriesId = crypto.randomUUID();
+  const catEatingOutId = crypto.randomUUID();
+  const catHousingId = crypto.randomUUID();
+  const catIncomeId = crypto.randomUUID();
+
+  // Level 2: Subcategories
+  const catSupermarketId = crypto.randomUUID();
+  const catConvenienceId = crypto.randomUUID();
+  const catBarId = crypto.randomUUID();
+  const catRestaurantId = crypto.randomUUID();
+  const catCoffeeId = crypto.randomUUID();
   const catRentId = crypto.randomUUID();
   const catUtilitiesId = crypto.randomUUID();
-  const catInternetId = crypto.randomUUID();
-  const catTransportId = crypto.randomUUID();
-
-  const catDiningId = crypto.randomUUID();
-  const catCoffeeId = crypto.randomUUID();
-  const catSubsId = crypto.randomUUID();
-  const catShoppingId = crypto.randomUUID();
-
   const catSalaryId = crypto.randomUUID();
-  const catInterestId = crypto.randomUUID();
-  const catOtherIncomeId = crypto.randomUUID();
+  const catInvestmentsId = crypto.randomUUID();
+
+  // Level 3: Sub-subcategories (multi-layer support!)
+  const catElectricityId = crypto.randomUUID();
+  const catInternetId = crypto.randomUUID();
 
   db.insert(categories).values([
-    // Essentials
-    { id: catGroceriesId, groupId: groupEssentialsId, name: 'Groceries & Supermarket', sortOrder: 1 },
-    { id: catRentId, groupId: groupEssentialsId, name: 'Rent / Mortgage', sortOrder: 2 },
-    { id: catUtilitiesId, groupId: groupEssentialsId, name: 'Utilities & Power', sortOrder: 3 },
-    { id: catInternetId, groupId: groupEssentialsId, name: 'Internet & Mobile', sortOrder: 4 },
-    { id: catTransportId, groupId: groupEssentialsId, name: 'Transport & Fuel', sortOrder: 5 },
-    // Lifestyle
-    { id: catDiningId, groupId: groupLifestyleId, name: 'Dining Out & Takeaways', sortOrder: 1 },
-    { id: catCoffeeId, groupId: groupLifestyleId, name: 'Coffee & Snacks', sortOrder: 2 },
-    { id: catSubsId, groupId: groupLifestyleId, name: 'Subscriptions', sortOrder: 3 },
-    { id: catShoppingId, groupId: groupLifestyleId, name: 'Shopping & Clothes', sortOrder: 4 },
-    // Income
-    { id: catSalaryId, groupId: groupIncomeId, name: 'Salary & Wages', sortOrder: 1 },
-    { id: catInterestId, groupId: groupIncomeId, name: 'Interest & Dividends', sortOrder: 2 },
-    { id: catOtherIncomeId, groupId: groupIncomeId, name: 'Other Income', sortOrder: 3 },
+    // Root level categories
+    { id: catGroceriesId, parentId: null, name: 'Groceries', sortOrder: 1 },
+    { id: catEatingOutId, parentId: null, name: 'Eating out', sortOrder: 2 },
+    { id: catHousingId, parentId: null, name: 'Housing & Living', sortOrder: 3 },
+    { id: catIncomeId, parentId: null, name: 'Income', sortOrder: 4 },
+
+    // Groceries children (Level 2)
+    { id: catSupermarketId, parentId: catGroceriesId, name: 'Supermarket', sortOrder: 1 },
+    { id: catConvenienceId, parentId: catGroceriesId, name: 'Convenience', sortOrder: 2 },
+
+    // Eating out children (Level 2)
+    { id: catBarId, parentId: catEatingOutId, name: 'Bar', sortOrder: 1 },
+    { id: catRestaurantId, parentId: catEatingOutId, name: 'Restaurant', sortOrder: 2 },
+    { id: catCoffeeId, parentId: catEatingOutId, name: 'Cafes & Coffee', sortOrder: 3 },
+
+    // Housing children (Level 2)
+    { id: catRentId, parentId: catHousingId, name: 'Rent / Mortgage', sortOrder: 1 },
+    { id: catUtilitiesId, parentId: catHousingId, name: 'Utilities', sortOrder: 2 },
+
+    // Utilities children (Level 3)
+    { id: catElectricityId, parentId: catUtilitiesId, name: 'Power & Electricity', sortOrder: 1 },
+    { id: catInternetId, parentId: catUtilitiesId, name: 'Internet & Mobile', sortOrder: 2 },
+
+    // Income children (Level 2)
+    { id: catSalaryId, parentId: catIncomeId, name: 'Salary & Wages', sortOrder: 1 },
+    { id: catInvestmentsId, parentId: catIncomeId, name: 'Investments & Dividends', sortOrder: 2 },
   ]).run();
 
-  // 3. Payees
+  // 2. Payees (assigned to either parent or child categories!)
   const payeePaknsaveId = crypto.randomUUID();
   const payeeCountdownId = crypto.randomUUID();
+  const payeeLocalCornerId = crypto.randomUUID();
+  const payeeCornerPubId = crypto.randomUUID();
+  const payeePastaBistroId = crypto.randomUUID();
   const payeeMercuryId = crypto.randomUUID();
   const payeeSparkId = crypto.randomUUID();
-  const payeeZId = crypto.randomUUID();
   const payeeMojoId = crypto.randomUUID();
-  const payeeNetflixId = crypto.randomUUID();
   const payeeEmployerId = crypto.randomUUID();
 
   db.insert(payees).values([
-    { id: payeePaknsaveId, name: "Pak'nSave", defaultCategoryId: catGroceriesId },
-    { id: payeeCountdownId, name: 'Woolworths / Countdown', defaultCategoryId: catGroceriesId },
-    { id: payeeMercuryId, name: 'Mercury Energy', defaultCategoryId: catUtilitiesId },
-    { id: payeeSparkId, name: 'Spark NZ', defaultCategoryId: catInternetId },
-    { id: payeeZId, name: 'Z Energy', defaultCategoryId: catTransportId },
+    // Child category defaults
+    { id: payeePaknsaveId, name: "Pak'nSave", defaultCategoryId: catSupermarketId },
+    { id: payeeCountdownId, name: 'Woolworths / Countdown', defaultCategoryId: catSupermarketId },
+    { id: payeeLocalCornerId, name: 'City Convenience Store', defaultCategoryId: catConvenienceId },
+    { id: payeeCornerPubId, name: 'The Craft Bar & Taphouse', defaultCategoryId: catBarId },
+    { id: payeePastaBistroId, name: 'Bella Italia Restaurant', defaultCategoryId: catRestaurantId },
     { id: payeeMojoId, name: 'Mojo Coffee', defaultCategoryId: catCoffeeId },
-    { id: payeeNetflixId, name: 'Netflix', defaultCategoryId: catSubsId },
+    // Level 3 child defaults
+    { id: payeeMercuryId, name: 'Mercury Energy', defaultCategoryId: catElectricityId },
+    { id: payeeSparkId, name: 'Spark NZ', defaultCategoryId: catInternetId },
+    // Income child default
     { id: payeeEmployerId, name: 'Employer Inc', defaultCategoryId: catSalaryId },
   ]).run();
 
@@ -135,7 +145,7 @@ export async function seed() {
     },
   ]).run();
 
-  // Recent transactions
+  // Recent transactions (testing both parent and child category selection)
   db.insert(transactions).values([
     {
       id: crypto.randomUUID(),
@@ -151,17 +161,17 @@ export async function seed() {
       id: crypto.randomUUID(),
       accountId: accCheckingId,
       payeeId: payeePaknsaveId,
-      categoryId: catGroceriesId,
+      categoryId: catSupermarketId, // Child category
       amountCents: -18450, // -$184.50
       date: daysAgo(10),
-      notes: 'Weekly groceries run',
+      notes: 'Weekly supermarket groceries run',
       isCleared: true,
     },
     {
       id: crypto.randomUUID(),
       accountId: accCheckingId,
       payeeId: payeeMercuryId,
-      categoryId: catUtilitiesId,
+      categoryId: catElectricityId, // Level 3 child
       amountCents: -14520, // -$145.20
       date: daysAgo(8),
       notes: 'Electricity bill',
@@ -170,8 +180,18 @@ export async function seed() {
     {
       id: crypto.randomUUID(),
       accountId: accCreditId,
+      payeeId: payeeLocalCornerId,
+      categoryId: catConvenienceId, // Child category
+      amountCents: -1850, // -$18.50
+      date: daysAgo(6),
+      notes: 'Milk & snacks',
+      isCleared: true,
+    },
+    {
+      id: crypto.randomUUID(),
+      accountId: accCreditId,
       payeeId: payeeMojoId,
-      categoryId: catCoffeeId,
+      categoryId: catCoffeeId, // Child category
       amountCents: -580, // -$5.80
       date: daysAgo(3),
       notes: 'Flat white',
@@ -180,21 +200,30 @@ export async function seed() {
     {
       id: crypto.randomUUID(),
       accountId: accCreditId,
-      payeeId: payeeNetflixId,
-      categoryId: catSubsId,
-      amountCents: -2299, // -$22.99
+      payeeId: payeePastaBistroId,
+      categoryId: catRestaurantId, // Child category
+      amountCents: -8900, // -$89.00
       date: daysAgo(2),
-      notes: 'Standard plan',
+      notes: 'Dinner date with friends',
+      isCleared: true,
+    },
+    {
+      id: crypto.randomUUID(),
+      accountId: accCreditId,
+      payeeId: payeeCornerPubId,
+      categoryId: catBarId, // Child category
+      amountCents: -3400, // -$34.00
+      date: daysAgo(1),
+      notes: 'Friday drinks',
       isCleared: true,
     },
     {
       id: crypto.randomUUID(),
       accountId: accCheckingId,
-      payeeId: payeeZId,
-      categoryId: catTransportId,
-      amountCents: -8500, // -$85.00
+      categoryId: catGroceriesId, // Parent category directly!
+      amountCents: -4500, // -$45.00
       date: today,
-      notes: 'Petrol fill up',
+      notes: 'General grocery market stall',
       isCleared: false,
     },
   ]).run();

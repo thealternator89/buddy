@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import {
   TransactionWithDetails,
   deleteTransaction,
@@ -15,13 +15,17 @@ import {
   Trash2,
 } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
-import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import {
+  CategoryNode,
+  CategoryFlatItem,
+  flattenCategoryTree,
+} from '@/lib/category-utils';
 import { Payee } from '@/lib/db/schema';
 
 interface TransactionTableProps {
   initialTransactions: TransactionWithDetails[];
   accounts: AccountWithBalance[];
-  categoryGroups: CategoryGroupWithChildren[];
+  categories: (CategoryNode | CategoryFlatItem)[];
   payees?: Payee[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
@@ -32,7 +36,7 @@ interface TransactionTableProps {
 export function TransactionTable({
   initialTransactions,
   accounts,
-  categoryGroups,
+  categories: inputCategories,
   payees = [],
   selectedAccountId,
   selectedCategoryId,
@@ -45,19 +49,48 @@ export function TransactionTable({
   const [filterPayee, setFilterPayee] = useState(selectedPayeeId || '');
   const [, startTransition] = useTransition();
 
+  const flatCategories = useMemo<CategoryFlatItem[]>(() => {
+    if (inputCategories.length === 0) return [];
+    if ('children' in inputCategories[0]) {
+      return flattenCategoryTree(inputCategories as CategoryNode[]);
+    }
+    return inputCategories as CategoryFlatItem[];
+  }, [inputCategories]);
+
+  // Subtree map for in-memory category filtering with rollups
+  const categorySubtreeMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const c of flatCategories) {
+      map.set(c.id, new Set([c.id]));
+    }
+    for (const c of flatCategories) {
+      let p = c.parentId;
+      while (p) {
+        map.get(p)?.add(c.id);
+        const parentItem = flatCategories.find((item) => item.id === p);
+        p = parentItem ? parentItem.parentId : null;
+      }
+    }
+    return map;
+  }, [flatCategories]);
+
   // Filter transactions in-memory for instant response
   const filtered = initialTransactions.filter((tx) => {
     if (filterAccount && tx.accountId !== filterAccount) return false;
-    if (filterCategory && tx.categoryId !== filterCategory) return false;
+    if (filterCategory) {
+      const allowed = categorySubtreeMap.get(filterCategory);
+      if (!allowed || !tx.categoryId || !allowed.has(tx.categoryId)) return false;
+    }
     if (filterPayee && tx.payeeId !== filterPayee) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const matchPayee = tx.payeeName?.toLowerCase().includes(q);
       const matchCat = tx.categoryName?.toLowerCase().includes(q);
+      const matchParentCat = tx.parentCategoryName?.toLowerCase().includes(q);
       const matchAcc = tx.accountName.toLowerCase().includes(q);
       const matchNotes = tx.notes?.toLowerCase().includes(q);
       const matchTransfer = tx.transferAccountName?.toLowerCase().includes(q);
-      if (!matchPayee && !matchCat && !matchAcc && !matchNotes && !matchTransfer) return false;
+      if (!matchPayee && !matchCat && !matchParentCat && !matchAcc && !matchNotes && !matchTransfer) return false;
     }
     return true;
   });
@@ -116,18 +149,18 @@ export function TransactionTable({
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 font-mono"
           >
             <option value="">All Categories</option>
-            {categoryGroups.map((group) => (
-              <optgroup key={group.id} label={group.name}>
-                {group.categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
+            {flatCategories.map((cat) => {
+              const indent = '  '.repeat(cat.depth);
+              const prefix = cat.depth > 0 ? '↳ ' : '● ';
+              return (
+                <option key={cat.id} value={cat.id}>
+                  {indent}{prefix}{cat.name}
+                </option>
+              );
+            })}
           </select>
 
           {/* Payee Filter */}
@@ -242,8 +275,13 @@ export function TransactionTable({
                         {isTransfer ? (
                           <span className="text-xs text-zinc-400 italic">—</span>
                         ) : tx.categoryName ? (
-                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                            {tx.categoryName}
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            {tx.parentCategoryName && (
+                              <span className="text-emerald-600/75 dark:text-emerald-400/75 text-[11px]">
+                                {tx.parentCategoryName} ›
+                              </span>
+                            )}
+                            <span>{tx.categoryName}</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">

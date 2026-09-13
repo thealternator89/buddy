@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/Navbar';
 import { getAccountsWithBalances } from '@/lib/actions/accounts';
-import { getCategoryGroupsWithCategories } from '@/lib/actions/categories';
+import { getCategoryTree } from '@/lib/actions/categories';
 import { getPayees } from '@/lib/actions/payees';
 
 const geistSans = Geist({
@@ -26,9 +26,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [accounts, categoryGroups, payees] = await Promise.all([
+  const [accounts, categoryTree, payees] = await Promise.all([
     getAccountsWithBalances(),
-    getCategoryGroupsWithCategories(),
+    getCategoryTree(),
     getPayees(),
   ]);
 
@@ -38,7 +38,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-        <Navbar accounts={accounts} categoryGroups={categoryGroups} payees={payees} />
+        <Navbar accounts={accounts} categories={categoryTree} payees={payees} />
         <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>

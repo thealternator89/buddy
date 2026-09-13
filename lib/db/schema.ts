@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { AnySQLiteColumn, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
@@ -24,24 +24,9 @@ export const accountsRelations = relations(accounts, ({ many }) => ({
   transactions: many(transactions),
 }));
 
-export const categoryGroups = sqliteTable('category_groups', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  sortOrder: integer('sort_order').notNull().default(0),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const categoryGroupsRelations = relations(categoryGroups, ({ many }) => ({
-  categories: many(categories),
-}));
-
 export const categories = sqliteTable('categories', {
   id: text('id').primaryKey(),
-  groupId: text('group_id')
-    .notNull()
-    .references(() => categoryGroups.id, { onDelete: 'cascade' }),
+  parentId: text('parent_id').references((): AnySQLiteColumn => categories.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
   isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
@@ -51,9 +36,13 @@ export const categories = sqliteTable('categories', {
 });
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
-  group: one(categoryGroups, {
-    fields: [categories.groupId],
-    references: [categoryGroups.id],
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: 'categoryHierarchy',
+  }),
+  children: many(categories, {
+    relationName: 'categoryHierarchy',
   }),
   transactions: many(transactions),
 }));
@@ -114,7 +103,6 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
-export type CategoryGroup = typeof categoryGroups.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Payee = typeof payees.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
