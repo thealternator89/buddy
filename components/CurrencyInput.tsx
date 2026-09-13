@@ -51,7 +51,6 @@ export function CurrencyInput({
         id={id}
         type="text"
         inputMode="numeric"
-        pattern="[0-9]*"
         autoFocus={autoFocus}
         required={required}
         value={displayValue}

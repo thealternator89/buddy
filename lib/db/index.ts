@@ -13,7 +13,6 @@ if (!fs.existsSync(dbDir)) {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __sqliteDb: Database.Database | undefined;
 }
 
@@ -23,6 +22,22 @@ const sqlite =
     const client = new Database(DB_PATH);
     client.pragma('journal_mode = WAL');
     client.pragma('foreign_keys = ON');
+
+    try {
+      const columns = client.pragma('table_info(accounts)') as Array<{ name: string }>;
+      const columnNames = new Set(columns.map((c) => c.name));
+      if (columnNames.size > 0) {
+        if (!columnNames.has('icon')) {
+          client.exec('ALTER TABLE accounts ADD COLUMN icon TEXT');
+        }
+        if (!columnNames.has('exclude_from_net_worth')) {
+          client.exec('ALTER TABLE accounts ADD COLUMN exclude_from_net_worth INTEGER NOT NULL DEFAULT 0');
+        }
+      }
+    } catch {
+      // Table might not exist yet before first migration/seed
+    }
+
     return client;
   })();
 

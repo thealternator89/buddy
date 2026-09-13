@@ -1,55 +1,36 @@
 import Link from 'next/link';
 import { getAccountsWithBalances } from '@/lib/actions/accounts';
 import { getTransactions } from '@/lib/actions/transactions';
-import { getCategoryGroupsWithCategories } from '@/lib/actions/categories';
-import { getPayees } from '@/lib/actions/payees';
 import { formatCurrency } from '@/lib/utils/currency';
 import { APP_CONFIG } from '@/lib/constants';
+import { AccountIcon } from '@/components/AccountIcon';
 import {
   TrendingUp,
-  TrendingDown,
   CreditCard,
   PiggyBank,
   Wallet,
   ArrowRight,
   ArrowLeftRight,
-  CheckCircle2,
-  Circle,
-  PlusCircle,
 } from 'lucide-react';
 
 export default async function DashboardPage() {
-  const [accounts, recentTransactions, categoryGroups, payees] = await Promise.all([
+  const [accounts, recentTransactions] = await Promise.all([
     getAccountsWithBalances(),
     getTransactions({ limit: 8 }),
-    getCategoryGroupsWithCategories(),
-    getPayees(),
   ]);
 
-  // Aggregate metrics
-  const netWorthCents = accounts.reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const liquidCashCents = accounts
+  // Aggregate metrics (excluding accounts flagged with excludeFromNetWorth)
+  const includedAccounts = accounts.filter((a) => !a.excludeFromNetWorth);
+  const netWorthCents = includedAccounts.reduce((sum, acc) => sum + acc.balanceCents, 0);
+  const liquidCashCents = includedAccounts
     .filter((a) => a.type === 'checking' || a.type === 'cash')
     .reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const savingsCents = accounts
+  const savingsCents = includedAccounts
     .filter((a) => a.type === 'savings' || a.type === 'other')
     .reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const creditDebtCents = accounts
+  const creditDebtCents = includedAccounts
     .filter((a) => a.type === 'credit')
     .reduce((sum, acc) => sum + acc.balanceCents, 0);
-
-  // Current month's income vs expense
-  const now = new Date();
-  const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const thisMonthTransactions = recentTransactions.filter((tx) =>
-    tx.date.startsWith(currentMonthPrefix)
-  );
-  const monthIncomeCents = thisMonthTransactions
-    .filter((t) => t.amountCents > 0 && !t.transferId)
-    .reduce((sum, t) => sum + t.amountCents, 0);
-  const monthExpenseCents = thisMonthTransactions
-    .filter((t) => t.amountCents < 0 && !t.transferId)
-    .reduce((sum, t) => sum + Math.abs(t.amountCents), 0);
 
   return (
     <div className="space-y-8">
@@ -80,7 +61,12 @@ export default async function DashboardPage() {
           <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             {formatCurrency(netWorthCents)}
           </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Across {accounts.length} accounts</p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Across {includedAccounts.length} {includedAccounts.length === 1 ? 'account' : 'accounts'}
+            {accounts.length > includedAccounts.length && (
+              <span> ({accounts.length - includedAccounts.length} excluded)</span>
+            )}
+          </p>
         </div>
 
         {/* Liquid Cash */}
@@ -153,16 +139,29 @@ export default async function DashboardPage() {
                 href={`/transactions?account=${acc.id}`}
                 className="group flex items-center justify-between p-4 rounded-xl border border-zinc-200 bg-white shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors dark:text-zinc-100 dark:group-hover:text-emerald-400">
-                    {acc.name}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                    <AccountIcon icon={acc.icon} type={acc.type} className="h-4 w-4" />
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 capitalize">
-                    {acc.type} • {acc.transactionCount} transactions
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
+                      {acc.name}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="capitalize">{acc.type}</span>
+                      <span>•</span>
+                      <span>{acc.transactionCount} txns</span>
+                      {acc.excludeFromNetWorth && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div
-                  className={`text-sm font-bold ${
+                  className={`text-sm font-bold pl-2 shrink-0 ${
                     acc.balanceCents < 0
                       ? 'text-rose-600 dark:text-rose-400'
                       : 'text-zinc-900 dark:text-zinc-100'

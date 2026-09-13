@@ -7,6 +7,10 @@ export const accounts = sqliteTable('accounts', {
   type: text('type', { enum: ['checking', 'savings', 'credit', 'cash', 'other'] })
     .notNull()
     .default('checking'),
+  icon: text('icon'),
+  excludeFromNetWorth: integer('exclude_from_net_worth', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
