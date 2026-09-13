@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { X, ArrowRight, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
+import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryGroupWithChildren } from '@/lib/actions/categories';
 import { Payee } from '@/lib/db/schema';
@@ -79,8 +79,8 @@ export function TransactionModal({
             isCleared,
           });
           onClose();
-        } catch (err: any) {
-          setError(err.message || 'Failed to record transfer.');
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Failed to record transfer.');
         }
       });
     } else {
@@ -108,8 +108,8 @@ export function TransactionModal({
             isCleared,
           });
           onClose();
-        } catch (err: any) {
-          setError(err.message || 'Failed to record transaction.');
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Failed to record transaction.');
         }
       });
     }

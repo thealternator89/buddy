@@ -3,7 +3,7 @@
 import { db } from '@/lib/db';
 import { accounts, categories, categoryGroups, payees, transactions } from '@/lib/db/schema';
 import { getOrCreatePayee } from './payees';
-import { and, desc, eq, gte, like, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -103,7 +103,7 @@ export async function getTransactions(
     .map((t) => t.transferId)
     .filter((id): id is string => Boolean(id));
 
-  let transferAccountMap = new Map<string, string>();
+  const transferAccountMap = new Map<string, string>();
   if (transferIds.length > 0) {
     const pairedTxs = await db
       .select({

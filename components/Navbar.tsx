@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   Wallet,
   ArrowLeftRight,
-  FolderTree,
+  SlidersHorizontal,
   LayoutDashboard,
   CreditCard,
   PlusCircle,
@@ -32,7 +32,7 @@ export function Navbar({ accounts = [], categoryGroups = [], payees = [] }: Navb
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/accounts', label: 'Accounts', icon: CreditCard },
     { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-    { href: '/categories', label: 'Categories', icon: FolderTree },
+    { href: '/manage', label: 'Manage', icon: SlidersHorizontal },
   ];
 
   return (
@@ -56,7 +56,10 @@ export function Navbar({ accounts = [], categoryGroups = [], payees = [] }: Navb
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive =
-                  item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+                  item.href === '/'
+                    ? pathname === '/'
+                    : pathname.startsWith(item.href) ||
+                      (item.href === '/manage' && pathname.startsWith('/categories'));
                 return (
                   <Link
                     key={item.href}
@@ -93,7 +96,10 @@ export function Navbar({ accounts = [], categoryGroups = [], payees = [] }: Navb
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
-              item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+              item.href === '/'
+                ? pathname === '/'
+                : pathname.startsWith(item.href) ||
+                  (item.href === '/manage' && pathname.startsWith('/categories'));
             return (
               <Link
                 key={item.href}

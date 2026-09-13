@@ -25,11 +25,13 @@ export function CategoryCombobox({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Keep a local copy of groups so newly created categories appear instantly
+  const [prevCategoryGroups, setPrevCategoryGroups] = useState(categoryGroups);
   const [groups, setGroups] = useState(categoryGroups);
 
-  useEffect(() => {
+  if (categoryGroups !== prevCategoryGroups) {
+    setPrevCategoryGroups(categoryGroups);
     setGroups(categoryGroups);
-  }, [categoryGroups]);
+  }
 
   // Find currently selected category
   const allCategories = groups.flatMap((g) =>

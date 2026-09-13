@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Payee } from '@/lib/db/schema';
-import { Search, Plus, Check, ChevronDown, X } from 'lucide-react';
+import { Plus, Check, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PayeeComboboxProps {
@@ -22,12 +22,13 @@ export function PayeeCombobox({
 }: PayeeComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Sync external value changes
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value);
     setQuery(value);
-  }, [value]);
+  }
 
   // Handle outside clicks to close dropdown
   useEffect(() => {

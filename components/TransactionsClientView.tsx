@@ -16,6 +16,8 @@ interface TransactionsClientViewProps {
   payees: Payee[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
+  selectedPayeeId?: string;
+  initialSearch?: string;
 }
 
 export function TransactionsClientView({
@@ -25,6 +27,8 @@ export function TransactionsClientView({
   payees,
   selectedAccountId,
   selectedCategoryId,
+  selectedPayeeId,
+  initialSearch,
 }: TransactionsClientViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -53,8 +57,11 @@ export function TransactionsClientView({
         initialTransactions={transactions}
         accounts={accounts}
         categoryGroups={categoryGroups}
+        payees={payees}
         selectedAccountId={selectedAccountId}
         selectedCategoryId={selectedCategoryId}
+        selectedPayeeId={selectedPayeeId}
+        initialSearch={initialSearch}
       />
 
       {isModalOpen && (

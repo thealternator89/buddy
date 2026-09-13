@@ -13,37 +13,43 @@ import {
   CheckCircle2,
   Circle,
   Trash2,
-  Filter,
-  ArrowUpRight,
-  ArrowDownLeft,
 } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryGroupWithChildren } from '@/lib/actions/categories';
+import { Payee } from '@/lib/db/schema';
 
 interface TransactionTableProps {
   initialTransactions: TransactionWithDetails[];
   accounts: AccountWithBalance[];
   categoryGroups: CategoryGroupWithChildren[];
+  payees?: Payee[];
   selectedAccountId?: string;
   selectedCategoryId?: string;
+  selectedPayeeId?: string;
+  initialSearch?: string;
 }
 
 export function TransactionTable({
   initialTransactions,
   accounts,
   categoryGroups,
+  payees = [],
   selectedAccountId,
   selectedCategoryId,
+  selectedPayeeId,
+  initialSearch,
 }: TransactionTableProps) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch || '');
   const [filterAccount, setFilterAccount] = useState(selectedAccountId || '');
   const [filterCategory, setFilterCategory] = useState(selectedCategoryId || '');
-  const [isPending, startTransition] = useTransition();
+  const [filterPayee, setFilterPayee] = useState(selectedPayeeId || '');
+  const [, startTransition] = useTransition();
 
   // Filter transactions in-memory for instant response
   const filtered = initialTransactions.filter((tx) => {
     if (filterAccount && tx.accountId !== filterAccount) return false;
     if (filterCategory && tx.categoryId !== filterCategory) return false;
+    if (filterPayee && tx.payeeId !== filterPayee) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const matchPayee = tx.payeeName?.toLowerCase().includes(q);
@@ -124,11 +130,28 @@ export function TransactionTable({
             ))}
           </select>
 
-          {(filterAccount || filterCategory || search) && (
+          {/* Payee Filter */}
+          {payees.length > 0 && (
+            <select
+              value={filterPayee}
+              onChange={(e) => setFilterPayee(e.target.value)}
+              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">All Payees</option>
+              {payees.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {(filterAccount || filterCategory || filterPayee || search) && (
             <button
               onClick={() => {
                 setFilterAccount('');
                 setFilterCategory('');
+                setFilterPayee('');
                 setSearch('');
               }}
               className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline px-1"

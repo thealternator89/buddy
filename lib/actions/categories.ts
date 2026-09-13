@@ -100,6 +100,7 @@ export async function createCategoryGroup(name: string) {
     })
     .run();
 
+  revalidatePath('/manage');
   revalidatePath('/categories');
   revalidatePath('/transactions');
   return { success: true, id };
@@ -123,9 +124,72 @@ export async function createCategory(groupId: string, name: string) {
     })
     .run();
 
+  revalidatePath('/manage');
   revalidatePath('/categories');
   revalidatePath('/transactions');
   return { success: true, id };
+}
+
+export async function updateCategory(
+  id: string,
+  data: { name: string; groupId?: string }
+) {
+  const trimmed = data.name.trim();
+  if (!trimmed) {
+    throw new Error('Category name cannot be empty.');
+  }
+
+  const updateData: { name: string; groupId?: string } = { name: trimmed };
+  if (data.groupId) {
+    updateData.groupId = data.groupId;
+  }
+
+  db.update(categories)
+    .set(updateData)
+    .where(eq(categories.id, id))
+    .run();
+
+  revalidatePath('/manage');
+  revalidatePath('/categories');
+  revalidatePath('/transactions');
+  return { success: true };
+}
+
+export async function updateCategoryGroup(id: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error('Group name cannot be empty.');
+  }
+
+  db.update(categoryGroups)
+    .set({ name: trimmed })
+    .where(eq(categoryGroups.id, id))
+    .run();
+
+  revalidatePath('/manage');
+  revalidatePath('/categories');
+  revalidatePath('/transactions');
+  return { success: true };
+}
+
+export async function deleteCategoryGroup(id: string) {
+  const catsInGroup = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.groupId, id));
+
+  if (catsInGroup.length > 0) {
+    throw new Error('Cannot delete a category group that contains categories. Please delete or reassign its categories first.');
+  }
+
+  db.delete(categoryGroups)
+    .where(eq(categoryGroups.id, id))
+    .run();
+
+  revalidatePath('/manage');
+  revalidatePath('/categories');
+  revalidatePath('/transactions');
+  return { success: true };
 }
 
 export async function archiveCategory(id: string) {
@@ -134,6 +198,7 @@ export async function archiveCategory(id: string) {
     .where(eq(categories.id, id))
     .run();
 
+  revalidatePath('/manage');
   revalidatePath('/categories');
   revalidatePath('/transactions');
   return { success: true };
