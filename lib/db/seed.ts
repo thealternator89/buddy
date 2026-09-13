@@ -1,5 +1,5 @@
 import { db } from './index';
-import { accounts, categories, payees, transactions } from './schema';
+import { accountGroups, accounts, categories, payees, transactions } from './schema';
 import crypto from 'crypto';
 
 export async function seed() {
@@ -10,6 +10,7 @@ export async function seed() {
   db.delete(payees).run();
   db.delete(categories).run();
   db.delete(accounts).run();
+  db.delete(accountGroups).run();
 
   // 1. Category Tree Hierarchy
   // Level 1: Root Categories
@@ -88,6 +89,17 @@ export async function seed() {
     { id: payeeEmployerId, name: 'Employer Inc', defaultCategoryId: catSalaryId },
   ]).run();
 
+  // 3. Account Groups
+  const grpEverydayId = crypto.randomUUID();
+  const grpSavingsId = crypto.randomUUID();
+  const grpCardsId = crypto.randomUUID();
+
+  db.insert(accountGroups).values([
+    { id: grpEverydayId, name: 'Everyday Banking', icon: 'Wallet', sortOrder: 1 },
+    { id: grpSavingsId, name: 'Savings & Goals', icon: 'PiggyBank', sortOrder: 2 },
+    { id: grpCardsId, name: 'Credit Cards', icon: 'CreditCard', sortOrder: 3 },
+  ]).run();
+
   // 4. Accounts
   const accCheckingId = crypto.randomUUID();
   const accSavingsId = crypto.randomUUID();
@@ -95,10 +107,10 @@ export async function seed() {
   const accCashId = crypto.randomUUID();
 
   db.insert(accounts).values([
-    { id: accCheckingId, name: 'Everyday Checking', type: 'checking' },
-    { id: accSavingsId, name: 'High Interest Savings', type: 'savings' },
-    { id: accCreditId, name: 'Visa Rewards Card', type: 'credit' },
-    { id: accCashId, name: 'Cash Wallet', type: 'cash' },
+    { id: accCheckingId, groupId: grpEverydayId, name: 'Everyday Checking', type: 'checking', icon: 'Wallet', sortOrder: 1 },
+    { id: accCashId, groupId: grpEverydayId, name: 'Cash Wallet', type: 'cash', icon: 'Banknote', sortOrder: 2 },
+    { id: accSavingsId, groupId: grpSavingsId, name: 'High Interest Savings', type: 'savings', icon: 'PiggyBank', sortOrder: 1 },
+    { id: accCreditId, groupId: grpCardsId, name: 'Visa Rewards Card', type: 'credit', icon: 'CreditCard', sortOrder: 1 },
   ]).run();
 
   // 5. Initial / Sample Transactions

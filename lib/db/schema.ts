@@ -1,13 +1,32 @@
 import { relations } from 'drizzle-orm';
 import { AnySQLiteColumn, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+export const accountGroups = sqliteTable('account_groups', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  icon: text('icon'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const accountGroupsRelations = relations(accountGroups, ({ many }) => ({
+  accounts: many(accounts),
+}));
+
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
+  groupId: text('group_id').references(() => accountGroups.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   type: text('type', { enum: ['checking', 'savings', 'credit', 'cash', 'other'] })
     .notNull()
     .default('checking'),
   icon: text('icon'),
+  sortOrder: integer('sort_order').notNull().default(0),
   excludeFromNetWorth: integer('exclude_from_net_worth', { mode: 'boolean' })
     .notNull()
     .default(false),
@@ -20,7 +39,11 @@ export const accounts = sqliteTable('accounts', {
     .$defaultFn(() => new Date()),
 });
 
-export const accountsRelations = relations(accounts, ({ many }) => ({
+export const accountsRelations = relations(accounts, ({ one, many }) => ({
+  group: one(accountGroups, {
+    fields: [accounts.groupId],
+    references: [accountGroups.id],
+  }),
   transactions: many(transactions),
 }));
 
@@ -101,6 +124,8 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+export type AccountGroup = typeof accountGroups.$inferSelect;
+export type NewAccountGroup = typeof accountGroups.$inferInsert;
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Category = typeof categories.$inferSelect;

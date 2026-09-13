@@ -12,14 +12,16 @@ interface AccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   account?: AccountWithBalance | null;
+  groups?: { id: string; name: string; icon?: string | null }[];
   onDelete?: (account: AccountWithBalance) => void;
 }
 
-export function AccountModal({ isOpen, onClose, account, onDelete }: AccountModalProps) {
+export function AccountModal({ isOpen, onClose, account, groups = [], onDelete }: AccountModalProps) {
   const isEditing = Boolean(account);
 
   const [name, setName] = useState(account?.name || '');
   const [type, setType] = useState<AccountType>(account?.type || 'checking');
+  const [groupId, setGroupId] = useState<string | null>(account?.groupId ?? null);
   const [icon, setIcon] = useState<string | null>(account?.icon ?? null);
   const [excludeFromNetWorth, setExcludeFromNetWorth] = useState(
     Boolean(account?.excludeFromNetWorth)
@@ -51,6 +53,7 @@ export function AccountModal({ isOpen, onClose, account, onDelete }: AccountModa
           await updateAccount(account.id, {
             name: name.trim(),
             type,
+            groupId,
             icon,
             excludeFromNetWorth,
           });
@@ -59,6 +62,7 @@ export function AccountModal({ isOpen, onClose, account, onDelete }: AccountModa
           await createAccount({
             name: name.trim(),
             type,
+            groupId,
             icon,
             excludeFromNetWorth,
             startingBalanceCents: finalCents,
@@ -136,6 +140,27 @@ export function AccountModal({ isOpen, onClose, account, onDelete }: AccountModa
               ))}
             </select>
           </div>
+
+          {/* Account Group */}
+          {groups.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Account Group
+              </label>
+              <select
+                value={groupId || ''}
+                onChange={(e) => setGroupId(e.target.value ? e.target.value : null)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                <option value="">None (Ungrouped)</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Custom Account Icon Picker */}
           <IconPicker value={icon} onChange={setIcon} accountType={type} />

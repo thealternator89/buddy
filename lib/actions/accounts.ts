@@ -1,17 +1,21 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { accounts, transactions } from '@/lib/db/schema';
+import { accountGroups, accounts, transactions } from '@/lib/db/schema';
 import { AccountType } from '@/lib/constants';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql, asc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
 export interface AccountWithBalance {
   id: string;
+  groupId?: string | null;
+  groupName?: string | null;
+  groupIcon?: string | null;
   name: string;
   type: AccountType;
   icon?: string | null;
+  sortOrder: number;
   excludeFromNetWorth: boolean;
   isArchived: boolean;
   balanceCents: number;
@@ -19,7 +23,23 @@ export interface AccountWithBalance {
 }
 
 export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
-  const allAccounts = await db.select().from(accounts).where(eq(accounts.isArchived, false));
+  const allAccounts = await db
+    .select({
+      id: accounts.id,
+      groupId: accounts.groupId,
+      groupName: accountGroups.name,
+      groupIcon: accountGroups.icon,
+      name: accounts.name,
+      type: accounts.type,
+      icon: accounts.icon,
+      sortOrder: accounts.sortOrder,
+      excludeFromNetWorth: accounts.excludeFromNetWorth,
+      isArchived: accounts.isArchived,
+    })
+    .from(accounts)
+    .leftJoin(accountGroups, eq(accounts.groupId, accountGroups.id))
+    .where(eq(accounts.isArchived, false))
+    .orderBy(asc(accounts.sortOrder), asc(accounts.name));
 
   // Compute balance per account from transactions
   const balances = await db
@@ -43,9 +63,13 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
     const stats = balanceMap.get(acc.id) || { total: 0, count: 0 };
     return {
       id: acc.id,
+      groupId: acc.groupId || null,
+      groupName: acc.groupName || null,
+      groupIcon: acc.groupIcon || null,
       name: acc.name,
       type: acc.type as AccountType,
       icon: acc.icon || null,
+      sortOrder: acc.sortOrder,
       excludeFromNetWorth: Boolean(acc.excludeFromNetWorth),
       isArchived: acc.isArchived,
       balanceCents: stats.total,
@@ -65,6 +89,7 @@ function safeRevalidatePath(path: string) {
 export async function createAccount(data: {
   name: string;
   type: AccountType;
+  groupId?: string | null;
   icon?: string | null;
   excludeFromNetWorth?: boolean;
   startingBalanceCents?: number;
@@ -74,6 +99,7 @@ export async function createAccount(data: {
   db.insert(accounts)
     .values({
       id: accountId,
+      groupId: data.groupId || null,
       name: data.name.trim(),
       type: data.type,
       icon: data.icon || null,
@@ -108,6 +134,7 @@ export async function updateAccount(
   data: {
     name?: string;
     type?: AccountType;
+    groupId?: string | null;
     icon?: string | null;
     excludeFromNetWorth?: boolean;
   }
@@ -124,6 +151,7 @@ export async function updateAccount(
     updatePayload.name = trimmed;
   }
   if (data.type) updatePayload.type = data.type;
+  if (data.groupId !== undefined) updatePayload.groupId = data.groupId || null;
   if (data.icon !== undefined) updatePayload.icon = data.icon;
   if (data.excludeFromNetWorth !== undefined) {
     updatePayload.excludeFromNetWorth = data.excludeFromNetWorth;
@@ -182,6 +210,28 @@ export async function deleteAccount(id: string) {
 
     // Delete the account
     tx.delete(accounts).where(eq(accounts.id, id)).run();
+  });
+
+  safeRevalidatePath('/');
+  safeRevalidatePath('/accounts');
+  safeRevalidatePath('/transactions');
+  return { success: true };
+}
+
+export async function reorderAccounts(
+  updates: { id: string; sortOrder: number; groupId?: string | null }[]
+) {
+  db.transaction((tx) => {
+    for (const item of updates) {
+      const payload: { sortOrder: number; updatedAt: Date; groupId?: string | null } = {
+        sortOrder: item.sortOrder,
+        updatedAt: new Date(),
+      };
+      if (item.groupId !== undefined) {
+        payload.groupId = item.groupId;
+      }
+      tx.update(accounts).set(payload).where(eq(accounts.id, item.id)).run();
+    }
   });
 
   safeRevalidatePath('/');
