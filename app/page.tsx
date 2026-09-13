@@ -156,9 +156,9 @@ export default async function DashboardPage() {
               No accounts added yet.
             </div>
           ) : activeGroups.length > 0 ? (
-            <div className="space-y-5">
+            <div className="space-y-6">
               {activeGroups.map((group) => (
-                <div key={group.id} className="space-y-2">
+                <div key={group.id} className="space-y-2.5">
                   <div className="flex items-center gap-2 px-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 min-w-0">
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
                       <GroupIcon icon={group.icon} className="h-3 w-3" />
@@ -169,7 +169,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400 shrink-0">({group.accounts.length})</span>
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {group.accounts.map((acc) => (
                       <Link
                         key={acc.id}
@@ -213,7 +213,7 @@ export default async function DashboardPage() {
               ))}
 
               {ungroupedAccounts.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   <div className="flex items-center gap-2 px-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 min-w-0">
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                       <Layers className="h-3 w-3" />
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400 shrink-0">({ungroupedAccounts.length})</span>
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {ungroupedAccounts.map((acc) => (
                       <Link
                         key={acc.id}
