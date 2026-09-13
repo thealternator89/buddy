@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { accountGroups, accounts, transactions } from '@/lib/db/schema';
-import { eq, inArray, sql, asc } from 'drizzle-orm';
+import { eq, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -27,7 +27,7 @@ export async function getAccountGroups(): Promise<AccountGroupWithStats[]> {
   const groups = await db
     .select()
     .from(accountGroups)
-    .orderBy(asc(accountGroups.sortOrder), asc(accountGroups.name));
+    .orderBy(asc(accountGroups.sortOrder), asc(accountGroups.createdAt), asc(accountGroups.name));
 
   const activeAccounts = await db
     .select({
@@ -86,20 +86,31 @@ export async function createAccountGroup(data: {
   }
 
   db.transaction((tx) => {
+    let sortOrder = data.sortOrder;
+    if (sortOrder === undefined) {
+      const maxOrderResult = tx
+        .select({ maxOrder: sql<number>`coalesce(max(${accountGroups.sortOrder}), 0)` })
+        .from(accountGroups)
+        .get();
+      sortOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+    }
+
     tx.insert(accountGroups)
       .values({
         id: groupId,
         name: trimmed,
         icon: data.icon || null,
-        sortOrder: data.sortOrder ?? 0,
+        sortOrder,
       })
       .run();
 
     if (data.accountIds && data.accountIds.length > 0) {
-      tx.update(accounts)
-        .set({ groupId, updatedAt: new Date() })
-        .where(inArray(accounts.id, data.accountIds))
-        .run();
+      for (let i = 0; i < data.accountIds.length; i++) {
+        tx.update(accounts)
+          .set({ groupId, sortOrder: i + 1, updatedAt: new Date() })
+          .where(eq(accounts.id, data.accountIds[i]))
+          .run();
+      }
     }
   });
 
@@ -146,17 +157,36 @@ export async function updateAccountGroup(
         .map((a) => a.id);
 
       if (toRemove.length > 0) {
-        tx.update(accounts)
-          .set({ groupId: null, updatedAt: new Date() })
-          .where(inArray(accounts.id, toRemove))
-          .run();
+        const maxUngroupedOrder = tx
+          .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
+          .from(accounts)
+          .where(and(isNull(accounts.groupId), eq(accounts.isArchived, false)))
+          .get();
+        let nextUngroupedOrder = (maxUngroupedOrder?.maxOrder ?? 0) + 1;
+        for (const remId of toRemove) {
+          tx.update(accounts)
+            .set({ groupId: null, sortOrder: nextUngroupedOrder++, updatedAt: new Date() })
+            .where(eq(accounts.id, remId))
+            .run();
+        }
       }
 
-      if (data.accountIds.length > 0) {
-        tx.update(accounts)
-          .set({ groupId: id, updatedAt: new Date() })
-          .where(inArray(accounts.id, data.accountIds))
-          .run();
+      const currentIdsSet = new Set(currentAccounts.map((a) => a.id));
+      const newlyAdded = data.accountIds.filter((accId) => !currentIdsSet.has(accId));
+
+      if (newlyAdded.length > 0) {
+        const maxOrderResult = tx
+          .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
+          .from(accounts)
+          .where(and(eq(accounts.groupId, id), eq(accounts.isArchived, false)))
+          .get();
+        let nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+        for (const accId of newlyAdded) {
+          tx.update(accounts)
+            .set({ groupId: id, sortOrder: nextOrder++, updatedAt: new Date() })
+            .where(eq(accounts.id, accId))
+            .run();
+        }
       }
     }
   });
@@ -170,11 +200,27 @@ export async function updateAccountGroup(
 
 export async function deleteAccountGroup(id: string) {
   db.transaction((tx) => {
-    // Unlink any accounts currently assigned to this group
-    tx.update(accounts)
-      .set({ groupId: null, updatedAt: new Date() })
+    // Unlink any accounts currently assigned to this group and append to ungrouped
+    const toUnlink = tx
+      .select({ id: accounts.id })
+      .from(accounts)
       .where(eq(accounts.groupId, id))
-      .run();
+      .all();
+
+    if (toUnlink.length > 0) {
+      const maxUngroupedOrder = tx
+        .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
+        .from(accounts)
+        .where(and(isNull(accounts.groupId), eq(accounts.isArchived, false)))
+        .get();
+      let nextUngroupedOrder = (maxUngroupedOrder?.maxOrder ?? 0) + 1;
+      for (const acc of toUnlink) {
+        tx.update(accounts)
+          .set({ groupId: null, sortOrder: nextUngroupedOrder++, updatedAt: new Date() })
+          .where(eq(accounts.id, acc.id))
+          .run();
+      }
+    }
 
     // Delete the group record
     tx.delete(accountGroups).where(eq(accountGroups.id, id)).run();

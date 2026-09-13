@@ -3,7 +3,7 @@
 import { db } from '@/lib/db';
 import { accountGroups, accounts, transactions } from '@/lib/db/schema';
 import { AccountType } from '@/lib/constants';
-import { eq, inArray, sql, asc } from 'drizzle-orm';
+import { eq, inArray, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -39,7 +39,7 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
     .from(accounts)
     .leftJoin(accountGroups, eq(accounts.groupId, accountGroups.id))
     .where(eq(accounts.isArchived, false))
-    .orderBy(asc(accounts.sortOrder), asc(accounts.name));
+    .orderBy(asc(accounts.sortOrder), asc(accounts.createdAt), asc(accounts.name));
 
   // Compute balance per account from transactions
   const balances = await db
@@ -95,14 +95,28 @@ export async function createAccount(data: {
   startingBalanceCents?: number;
 }) {
   const accountId = crypto.randomUUID();
+  const targetGroupId = data.groupId || null;
+
+  const whereCondition = targetGroupId
+    ? and(eq(accounts.groupId, targetGroupId), eq(accounts.isArchived, false))
+    : and(isNull(accounts.groupId), eq(accounts.isArchived, false));
+
+  const maxOrderResult = db
+    .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
+    .from(accounts)
+    .where(whereCondition)
+    .get();
+
+  const nextSortOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
 
   db.insert(accounts)
     .values({
       id: accountId,
-      groupId: data.groupId || null,
+      groupId: targetGroupId,
       name: data.name.trim(),
       type: data.type,
       icon: data.icon || null,
+      sortOrder: nextSortOrder,
       excludeFromNetWorth: Boolean(data.excludeFromNetWorth),
       isArchived: false,
     })
@@ -151,7 +165,26 @@ export async function updateAccount(
     updatePayload.name = trimmed;
   }
   if (data.type) updatePayload.type = data.type;
-  if (data.groupId !== undefined) updatePayload.groupId = data.groupId || null;
+  if (data.groupId !== undefined) {
+    const current = db
+      .select({ groupId: accounts.groupId })
+      .from(accounts)
+      .where(eq(accounts.id, id))
+      .get();
+    const newGroupId = data.groupId || null;
+    if (current && (current.groupId || null) !== newGroupId) {
+      const whereCondition = newGroupId
+        ? and(eq(accounts.groupId, newGroupId), eq(accounts.isArchived, false))
+        : and(isNull(accounts.groupId), eq(accounts.isArchived, false));
+      const maxOrder = db
+        .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
+        .from(accounts)
+        .where(whereCondition)
+        .get();
+      updatePayload.sortOrder = (maxOrder?.maxOrder ?? 0) + 1;
+    }
+    updatePayload.groupId = newGroupId;
+  }
   if (data.icon !== undefined) updatePayload.icon = data.icon;
   if (data.excludeFromNetWorth !== undefined) {
     updatePayload.excludeFromNetWorth = data.excludeFromNetWorth;
