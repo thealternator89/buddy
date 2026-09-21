@@ -7,10 +7,6 @@ import { APP_CONFIG } from '@/lib/constants';
 import { AccountIcon } from '@/components/AccountIcon';
 import { GroupIcon } from '@/components/GroupIcon';
 import {
-  TrendingUp,
-  CreditCard,
-  PiggyBank,
-  Wallet,
   ArrowRight,
   ArrowLeftRight,
   Layers,
@@ -22,19 +18,6 @@ export default async function DashboardPage() {
     getTransactions({ limit: 8 }),
     getAccountGroups(),
   ]);
-
-  // Aggregate metrics (excluding accounts flagged with excludeFromNetWorth)
-  const includedAccounts = accounts.filter((a) => !a.excludeFromNetWorth);
-  const netWorthCents = includedAccounts.reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const liquidCashCents = includedAccounts
-    .filter((a) => a.type === 'checking' || a.type === 'cash')
-    .reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const savingsCents = includedAccounts
-    .filter((a) => a.type === 'savings' || a.type === 'other')
-    .reduce((sum, acc) => sum + acc.balanceCents, 0);
-  const creditDebtCents = includedAccounts
-    .filter((a) => a.type === 'credit')
-    .reduce((sum, acc) => sum + acc.balanceCents, 0);
 
   // Group accounts for overview display
   const knownGroupIds = new Set(groups.map((g) => g.id));
@@ -62,78 +45,6 @@ export default async function DashboardPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             Tracking in <span className="font-semibold text-zinc-700 dark:text-zinc-300">{APP_CONFIG.currency.code} ({APP_CONFIG.currency.symbol})</span>
           </p>
-        </div>
-      </div>
-
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Net Worth */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Total Net Worth
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <Wallet className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(netWorthCents)}
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Across {includedAccounts.length} {includedAccounts.length === 1 ? 'account' : 'accounts'}
-            {accounts.length > includedAccounts.length && (
-              <span> ({accounts.length - includedAccounts.length} excluded)</span>
-            )}
-          </p>
-        </div>
-
-        {/* Liquid Cash */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Liquid Cash
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(liquidCashCents)}
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Checking & Cash on hand</p>
-        </div>
-
-        {/* Savings */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Savings
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-              <PiggyBank className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(savingsCents)}
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Long-term & Emergency</p>
-        </div>
-
-        {/* Credit Card Balance */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Credit Card Balance
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400">
-              <CreditCard className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(creditDebtCents)}
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Outstanding liabilities</p>
         </div>
       </div>
 
