@@ -171,11 +171,19 @@ export function TransactionTable({
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <option value="">All Payees</option>
-              {payees.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {payees
+                .filter((p) => (p.priority ?? 1) !== 3 || p.id === filterPayee)
+                .sort((a, b) => {
+                  const prioA = a.priority ?? 1;
+                  const prioB = b.priority ?? 1;
+                  if (prioA !== prioB) return prioA - prioB;
+                  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                })
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {(p.priority ?? 1) === 0 ? '⭐ ' : ''}{p.name}{(p.priority ?? 1) === 3 ? ' (Archived)' : ''}
+                  </option>
+                ))}
             </select>
           )}
 

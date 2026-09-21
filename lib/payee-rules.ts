@@ -13,10 +13,54 @@ export interface PayeeRuleItem {
   sortOrder?: number;
 }
 
+export type PayeePriority = 0 | 1 | 2 | 3;
+
+export const PAYEE_PRIORITY_META: Record<
+  PayeePriority,
+  {
+    label: string;
+    description: string;
+    badgeBg: string;
+    badgeText: string;
+    badgeBorder: string;
+  }
+> = {
+  0: {
+    label: 'Highest',
+    description: 'Displayed before entry in selection lists',
+    badgeBg: 'bg-emerald-50 dark:bg-emerald-950/60',
+    badgeText: 'text-emerald-700 dark:text-emerald-300',
+    badgeBorder: 'border-emerald-200/60 dark:border-emerald-800/60',
+  },
+  1: {
+    label: 'Standard',
+    description: 'Current standard behaviour',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    badgeBorder: 'border-zinc-200/60 dark:border-zinc-700/60',
+  },
+  2: {
+    label: 'Low',
+    description: 'Selectable, but appears at bottom of selection list',
+    badgeBg: 'bg-amber-50 dark:bg-amber-950/60',
+    badgeText: 'text-amber-700 dark:text-amber-300',
+    badgeBorder: 'border-amber-200/60 dark:border-amber-800/60',
+  },
+  3: {
+    label: 'Archived',
+    description: 'Hidden from selection lists, visible in existing transactions',
+    badgeBg: 'bg-rose-50 dark:bg-rose-950/60',
+    badgeText: 'text-rose-700 dark:text-rose-400',
+    badgeBorder: 'border-rose-200/60 dark:border-rose-800/60',
+  },
+};
+
 export interface PayeeWithRules {
   id: string;
   name: string;
   defaultCategoryId: string | null;
+  priority?: number;
+  createdAt?: Date;
   rules?: PayeeRuleItem[];
 }
 

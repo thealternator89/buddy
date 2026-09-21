@@ -100,6 +100,13 @@ const sqlite =
         );
         CREATE INDEX IF NOT EXISTS \`idx_payee_rules_payee_id\` ON \`payee_rules\`(\`payee_id\`);
       `);
+
+      // 4. Payees priority column auto-migration
+      const payeeCols = client.pragma('table_info(payees)') as Array<{ name: string }>;
+      const payeeColNames = new Set(payeeCols.map((c) => c.name));
+      if (payeeColNames.size > 0 && !payeeColNames.has('priority')) {
+        client.exec('ALTER TABLE payees ADD COLUMN priority INTEGER NOT NULL DEFAULT 1');
+      }
     } catch (e) {
       console.error('Database auto-migration note:', e);
     }

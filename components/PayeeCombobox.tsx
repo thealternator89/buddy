@@ -43,11 +43,50 @@ export function PayeeCombobox({
 
   const trimmedQuery = query.trim().toLowerCase();
 
-  const filteredPayees = payees.filter((p) =>
-    p.name.toLowerCase().includes(trimmedQuery)
-  );
+  // Exclude archived payees (priority 3) from selection lists
+  const activePayees = payees.filter((p) => (p.priority ?? 1) !== 3);
 
-  const exactMatch = payees.find(
+  // Before entry (query is empty): display ONLY Priority 0 (highest) payees
+  // After entry (query is not empty): display matching payees ordered by Priority (0 > 1 > 2)
+  const isBeforeEntry = !trimmedQuery;
+
+  let filteredPayees: PayeeWithRules[] = [];
+  if (isBeforeEntry) {
+    filteredPayees = activePayees
+      .filter((p) => (p.priority ?? 1) === 0)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  } else {
+    const matches = activePayees.filter((p) =>
+      p.name.toLowerCase().includes(trimmedQuery)
+    );
+
+    // Sort order:
+    // 1. Priority: 0 (Highest) -> 1 (Standard) -> 2 (Low, even if better match)
+    // 2. Match quality within same priority: exact match -> startsWith -> contains
+    // 3. Alphabetical
+    filteredPayees = matches.sort((a, b) => {
+      const prioA = a.priority ?? 1;
+      const prioB = b.priority ?? 1;
+      if (prioA !== prioB) {
+        return prioA - prioB;
+      }
+
+      const nameA = a.name.toLowerCase();
+      const nameB = b.name.toLowerCase();
+
+      const exactA = nameA === trimmedQuery ? 0 : 1;
+      const exactB = nameB === trimmedQuery ? 0 : 1;
+      if (exactA !== exactB) return exactA - exactB;
+
+      const startsA = nameA.startsWith(trimmedQuery) ? 0 : 1;
+      const startsB = nameB.startsWith(trimmedQuery) ? 0 : 1;
+      if (startsA !== startsB) return startsA - startsB;
+
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+  }
+
+  const exactMatch = activePayees.find(
     (p) => p.name.toLowerCase() === trimmedQuery
   );
 
@@ -124,14 +163,28 @@ export function PayeeCombobox({
             </button>
           )}
 
-          {/* List of matching payees */}
-          {filteredPayees.length === 0 && !query.trim() ? (
-            <div className="px-3 py-2 text-xs text-zinc-400">No payees yet. Type to create one.</div>
-          ) : filteredPayees.length === 0 && query.trim() && exactMatch ? null : filteredPayees.length === 0 ? (
+          {/* Header before entry */}
+          {isBeforeEntry && (
+            <div className="flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider uppercase text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-zinc-800/60 mb-0.5">
+              <span>Priority Payees</span>
+              <span className="text-[10px] font-normal lowercase tracking-normal text-zinc-400">
+                Type to search all
+              </span>
+            </div>
+          )}
+
+          {/* List of payees */}
+          {isBeforeEntry && filteredPayees.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-zinc-400 text-center">
+              No highest priority payees.<br />
+              <span className="text-[11px] text-zinc-400/80">Type to search, or set payees to Priority 0 in Manage to see them here.</span>
+            </div>
+          ) : !isBeforeEntry && filteredPayees.length === 0 && !exactMatch ? (
             <div className="px-3 py-2 text-xs text-zinc-400">No other existing payees found.</div>
-          ) : (
+          ) : !isBeforeEntry && filteredPayees.length === 0 && exactMatch ? null : (
             filteredPayees.map((payee) => {
               const isSelected = value.toLowerCase() === payee.name.toLowerCase();
+              const pRank = payee.priority ?? 1;
               return (
                 <button
                   key={payee.id}
@@ -144,8 +197,20 @@ export function PayeeCombobox({
                       : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
                   )}
                 >
-                  <span className="truncate">{payee.name}</span>
-                  {isSelected && <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{payee.name}</span>
+                    {pRank === 0 && (
+                      <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                        Highest
+                      </span>
+                    )}
+                    {pRank === 2 && (
+                      <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
+                        Low
+                      </span>
+                    )}
+                  </div>
+                  {isSelected && <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />}
                 </button>
               );
             })

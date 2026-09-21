@@ -19,7 +19,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Sliders,
+  Star,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { formatRuleCondition } from '@/lib/payee-rules';
 
 interface PayeesTabProps {
@@ -39,7 +41,8 @@ export function PayeesTab({
 }: PayeesTabProps) {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc'>('name-asc');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'priority-asc' | 'priority-desc'>('priority-asc');
 
   const flatCategories = useMemo<CategoryFlatItem[]>(() => {
     if (inputCategories.length === 0) return [];
@@ -51,6 +54,10 @@ export function PayeesTab({
 
   // Compute stats
   const totalPayees = payees.length;
+  const highestCount = payees.filter((p) => (p.priority ?? 1) === 0).length;
+  const standardCount = payees.filter((p) => (p.priority ?? 1) === 1).length;
+  const lowCount = payees.filter((p) => (p.priority ?? 1) === 2).length;
+  const archivedCount = payees.filter((p) => (p.priority ?? 1) === 3).length;
   const categorizedCount = payees.filter((p) => Boolean(p.defaultCategoryId)).length;
   const rulesCount = payees.filter((p) => p.rules && p.rules.length > 0).length;
   const uncategorizedCount = totalPayees - categorizedCount;
@@ -84,8 +91,25 @@ export function PayeesTab({
       result = result.filter((p) => p.defaultCategoryId === filterCategory);
     }
 
+    if (filterPriority === 'active') {
+      result = result.filter((p) => (p.priority ?? 1) !== 3);
+    } else if (filterPriority !== 'all') {
+      const targetPrio = parseInt(filterPriority, 10);
+      result = result.filter((p) => (p.priority ?? 1) === targetPrio);
+    }
+
     // Sort
     result.sort((a, b) => {
+      if (sortBy === 'priority-asc') {
+        const pDiff = (a.priority ?? 1) - (b.priority ?? 1);
+        if (pDiff !== 0) return pDiff;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      }
+      if (sortBy === 'priority-desc') {
+        const pDiff = (b.priority ?? 1) - (a.priority ?? 1);
+        if (pDiff !== 0) return pDiff;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      }
       if (sortBy === 'name-asc') {
         return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
       }
@@ -96,12 +120,12 @@ export function PayeesTab({
     });
 
     return result;
-  }, [payees, search, filterCategory, sortBy]);
+  }, [payees, search, filterCategory, filterPriority, sortBy]);
 
   return (
     <div className="space-y-6">
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
@@ -117,6 +141,31 @@ export function PayeesTab({
             </span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">registered</span>
           </div>
+          {archivedCount > 0 && (
+            <p className="mt-1 text-xs text-zinc-400">
+              {archivedCount} archived
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Highest Priority
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+              <Star className="h-4 w-4 fill-emerald-500" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {highestCount}
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">quick-picks</span>
+          </div>
+          <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+            Shown before typing in selection box
+          </p>
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
@@ -180,6 +229,20 @@ export function PayeesTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Priority Filter */}
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+          >
+            <option value="all">All Priorities</option>
+            <option value="active">Active (Non-Archived)</option>
+            <option value="0">Priority 0 • Highest ({highestCount})</option>
+            <option value="1">Priority 1 • Standard ({standardCount})</option>
+            <option value="2">Priority 2 • Low ({lowCount})</option>
+            <option value="3">Priority 3 • Archived ({archivedCount})</option>
+          </select>
+
           {/* Category Filter */}
           <select
             value={filterCategory}
@@ -205,19 +268,22 @@ export function PayeesTab({
           <select
             value={sortBy}
             onChange={(e) =>
-              setSortBy(e.target.value as 'name-asc' | 'name-desc')
+              setSortBy(e.target.value as 'name-asc' | 'name-desc' | 'priority-asc' | 'priority-desc')
             }
             className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
           >
+            <option value="priority-asc">Priority (Highest 0 ➔ 3)</option>
+            <option value="priority-desc">Priority (Archived 3 ➔ 0)</option>
             <option value="name-asc">Name (A-Z)</option>
             <option value="name-desc">Name (Z-A)</option>
           </select>
 
-          {(search || filterCategory !== 'all') && (
+          {(search || filterCategory !== 'all' || filterPriority !== 'all') && (
             <button
               onClick={() => {
                 setSearch('');
                 setFilterCategory('all');
+                setFilterPriority('all');
               }}
               className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline px-1"
             >
@@ -234,19 +300,22 @@ export function PayeesTab({
             <Building2 className="h-6 w-6" />
           </div>
           <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-zinc-100">
-            {search || filterCategory !== 'all' ? 'No matching payees found' : 'No payees yet'}
+            {search || filterCategory !== 'all' || filterPriority !== 'all'
+              ? 'No matching payees found'
+              : 'No payees yet'}
           </h3>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            {search || filterCategory !== 'all'
+            {search || filterCategory !== 'all' || filterPriority !== 'all'
               ? 'Try changing your search keywords or filter options.'
               : 'Add your first payee to streamline tracking and categorize future transactions automatically.'}
           </p>
           <div className="mt-6">
-            {search || filterCategory !== 'all' ? (
+            {search || filterCategory !== 'all' || filterPriority !== 'all' ? (
               <button
                 onClick={() => {
                   setSearch('');
                   setFilterCategory('all');
+                  setFilterPriority('all');
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
               >
@@ -268,21 +337,55 @@ export function PayeesTab({
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
             {filteredPayees.map((payee) => {
               const hasDefaultCat = Boolean(payee.defaultCategoryId && payee.defaultCategoryName);
+              const pRank = payee.priority ?? 1;
+              const isArchived = pRank === 3;
               return (
                 <div
                   key={payee.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 hover:bg-zinc-50/75 transition-colors dark:hover:bg-zinc-800/40 gap-3"
+                  className={cn(
+                    'flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 hover:bg-zinc-50/75 transition-colors dark:hover:bg-zinc-800/40 gap-3',
+                    isArchived && 'bg-zinc-50/40 dark:bg-zinc-900/40 opacity-80'
+                  )}
                 >
-                  {/* Left: Payee Name and Default Category */}
+                  {/* Left: Payee Name, Priority, and Default Category */}
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 font-bold text-sm">
+                    <div className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold text-sm',
+                      pRank === 0
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : isArchived
+                        ? 'bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'
+                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                    )}>
                       {payee.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-base truncate">
+                        <span className={cn(
+                          'font-semibold text-base truncate',
+                          isArchived ? 'text-zinc-500 dark:text-zinc-400 line-through' : 'text-zinc-900 dark:text-zinc-100'
+                        )}>
                           {payee.name}
                         </span>
+
+                        {/* Priority Badge */}
+                        {pRank === 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
+                            <Star className="h-3 w-3 fill-emerald-500 text-emerald-600 dark:text-emerald-400" />
+                            <span>Highest</span>
+                          </span>
+                        )}
+                        {pRank === 2 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200/60 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                            Low Priority
+                          </span>
+                        )}
+                        {pRank === 3 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 border border-rose-200/60 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/60">
+                            Archived
+                          </span>
+                        )}
+
                         {hasDefaultCat ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                             <Tag className="h-3 w-3" />

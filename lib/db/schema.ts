@@ -77,6 +77,7 @@ export const payees = sqliteTable('payees', {
   defaultCategoryId: text('default_category_id').references(() => categories.id, {
     onDelete: 'set null',
   }),
+  priority: integer('priority').notNull().default(1),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

@@ -22,6 +22,7 @@ export interface PayeeWithStats {
   defaultCategoryId: string | null;
   defaultCategoryName: string | null;
   parentCategoryName: string | null;
+  priority: number;
   rules: PayeeRuleItem[];
   transactionCount: number;
   totalSpentCents: number;
@@ -34,6 +35,7 @@ export interface PayeeWithRules {
   id: string;
   name: string;
   defaultCategoryId: string | null;
+  priority: number;
   createdAt: Date;
   rules: PayeeRuleItem[];
 }
@@ -45,7 +47,10 @@ export interface CreatePayeeRuleInput {
 }
 
 export async function getPayees(): Promise<PayeeWithRules[]> {
-  const allPayees = await db.select().from(payees).orderBy(asc(payees.name));
+  const allPayees = await db
+    .select()
+    .from(payees)
+    .orderBy(asc(payees.priority), asc(payees.name));
 
   const allRules = await db
     .select({
@@ -78,6 +83,7 @@ export async function getPayees(): Promise<PayeeWithRules[]> {
 
   return allPayees.map((p) => ({
     ...p,
+    priority: p.priority ?? 1,
     rules: rulesMap.get(p.id) || [],
   }));
 }
@@ -93,12 +99,13 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       defaultCategoryId: payees.defaultCategoryId,
       defaultCategoryName: categories.name,
       parentCategoryName: parentCategories.name,
+      priority: payees.priority,
       createdAt: payees.createdAt,
     })
     .from(payees)
     .leftJoin(categories, eq(payees.defaultCategoryId, categories.id))
     .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
-    .orderBy(asc(payees.name));
+    .orderBy(asc(payees.priority), asc(payees.name));
 
   const allRules = await db
     .select({
@@ -172,6 +179,7 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       defaultCategoryId: p.defaultCategoryId,
       defaultCategoryName: p.defaultCategoryName || null,
       parentCategoryName: p.parentCategoryName || null,
+      priority: p.priority ?? 1,
       rules: rulesMap.get(p.id) || [],
       transactionCount: stats.count,
       totalSpentCents: stats.totalSpent,
@@ -185,7 +193,8 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
 export async function createPayee(
   name: string,
   defaultCategoryId?: string | null,
-  rules?: CreatePayeeRuleInput[]
+  rules?: CreatePayeeRuleInput[],
+  priority: number = 1
 ) {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -202,6 +211,7 @@ export async function createPayee(
     throw new Error(`A payee named "${existing[0].name}" already exists.`);
   }
 
+  const sanitizedPriority = Math.min(Math.max(Number(priority) ?? 1, 0), 3);
   const id = crypto.randomUUID();
   sqlite.transaction(() => {
     db.insert(payees)
@@ -209,6 +219,7 @@ export async function createPayee(
         id,
         name: trimmed,
         defaultCategoryId: defaultCategoryId || null,
+        priority: sanitizedPriority,
       })
       .run();
 
@@ -234,7 +245,7 @@ export async function createPayee(
   safeRevalidatePath('/transactions');
   safeRevalidatePath('/accounts');
   safeRevalidatePath('/');
-  return { success: true, id, name: trimmed };
+  return { success: true, id, name: trimmed, priority: sanitizedPriority };
 }
 
 export async function updatePayee(
@@ -243,6 +254,7 @@ export async function updatePayee(
     name: string;
     defaultCategoryId?: string | null;
     rules?: CreatePayeeRuleInput[];
+    priority?: number;
   }
 ) {
   const trimmed = data.name.trim();
@@ -260,12 +272,22 @@ export async function updatePayee(
     throw new Error(`Another payee named "${existing[0].name}" already exists.`);
   }
 
+  const updateFields: {
+    name: string;
+    defaultCategoryId: string | null;
+    priority?: number;
+  } = {
+    name: trimmed,
+    defaultCategoryId: data.defaultCategoryId || null,
+  };
+
+  if (data.priority !== undefined) {
+    updateFields.priority = Math.min(Math.max(Number(data.priority) ?? 1, 0), 3);
+  }
+
   sqlite.transaction(() => {
     db.update(payees)
-      .set({
-        name: trimmed,
-        defaultCategoryId: data.defaultCategoryId || null,
-      })
+      .set(updateFields)
       .where(eq(payees.id, id))
       .run();
 
@@ -286,6 +308,21 @@ export async function updatePayee(
       }
     }
   })();
+
+  safeRevalidatePath('/manage');
+  safeRevalidatePath('/categories');
+  safeRevalidatePath('/transactions');
+  safeRevalidatePath('/accounts');
+  safeRevalidatePath('/');
+  return { success: true };
+}
+
+export async function updatePayeePriority(id: string, priority: number) {
+  const sanitizedPriority = Math.min(Math.max(Number(priority) ?? 1, 0), 3);
+  db.update(payees)
+    .set({ priority: sanitizedPriority })
+    .where(eq(payees.id, id))
+    .run();
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -337,6 +374,7 @@ export async function getOrCreatePayee(name: string, defaultCategoryId?: string)
       id,
       name: trimmed,
       defaultCategoryId: defaultCategoryId || null,
+      priority: 1,
     })
     .run();
 

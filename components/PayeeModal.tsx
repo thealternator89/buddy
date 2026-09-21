@@ -15,6 +15,7 @@ import {
   resolvePayeeCategory,
   formatRuleCondition,
 } from '@/lib/payee-rules';
+import { cn } from '@/lib/utils';
 
 interface PayeeModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
   const isEditing = Boolean(payee);
   const [name, setName] = useState(payee?.name || '');
   const [defaultCategoryId, setDefaultCategoryId] = useState(payee?.defaultCategoryId || '');
+  const [priority, setPriority] = useState<number>(payee?.priority ?? 1);
   const [rules, setRules] = useState<RuleDraft[]>(() => {
     if (!payee?.rules) return [];
     return payee.rules.map((r) => ({
@@ -147,9 +149,10 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
             name: name.trim(),
             defaultCategoryId: defaultCategoryId || null,
             rules: payloadRules,
+            priority,
           });
         } else {
-          await createPayee(name.trim(), defaultCategoryId || null, payloadRules);
+          await createPayee(name.trim(), defaultCategoryId || null, payloadRules, priority);
         }
         onClose();
       } catch (err: unknown) {
@@ -235,6 +238,65 @@ export function PayeeModal({ isOpen, onClose, categories: inputCategories, payee
             </select>
             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
               Used when no amount-based rule matches or when no rules are configured.
+            </p>
+          </div>
+
+          {/* Payee Priority Selector */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Priority
+            </label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                {
+                  val: 0,
+                  badge: '0 • Highest',
+                  desc: 'Quick-pick before entry',
+                  activeClass: 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-500 ring-2 ring-emerald-500/20',
+                },
+                {
+                  val: 1,
+                  badge: '1 • Standard',
+                  desc: 'Standard search behavior',
+                  activeClass: 'border-zinc-500 bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-400 ring-2 ring-zinc-500/20',
+                },
+                {
+                  val: 2,
+                  badge: '2 • Low',
+                  desc: 'Bottom of search list',
+                  activeClass: 'border-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-500 ring-2 ring-amber-500/20',
+                },
+                {
+                  val: 3,
+                  badge: '3 • Archived',
+                  desc: 'Hidden from selection',
+                  activeClass: 'border-rose-500 bg-rose-50 text-rose-900 dark:bg-rose-950/60 dark:text-rose-200 dark:border-rose-500 ring-2 ring-rose-500/20',
+                },
+              ].map((opt) => {
+                const isSelected = priority === opt.val;
+                return (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => setPriority(opt.val)}
+                    className={cn(
+                      'flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer',
+                      isSelected
+                        ? opt.activeClass
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/80 dark:hover:text-zinc-200'
+                    )}
+                  >
+                    <span className="font-semibold text-xs">{opt.badge}</span>
+                    <span className="text-[10px] mt-0.5 opacity-80 leading-tight">{opt.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+              {priority === 0 && '0 is highest: Displayed before entry in the payee selection box, and ranked first in search results.'}
+              {priority === 1 && '1 is standard: Current standard behavior. Search to find payee.'}
+              {priority === 2 && '2 is low: Selectable, but appears at the bottom of the payee list even if it is a better match for current input.'}
+              {priority === 3 && '3 is archived: Never appears in selection lists, but remains visible in existing transactions.'}
             </p>
           </div>
 

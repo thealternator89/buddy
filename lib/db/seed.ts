@@ -73,20 +73,26 @@ export async function seed() {
   const payeeSparkId = crypto.randomUUID();
   const payeeMojoId = crypto.randomUUID();
   const payeeEmployerId = crypto.randomUUID();
+  const payeeOldBakeryId = crypto.randomUUID();
 
   db.insert(payees).values([
-    // Child category defaults
-    { id: payeePaknsaveId, name: "Pak'nSave", defaultCategoryId: catSupermarketId },
-    { id: payeeCountdownId, name: 'Woolworths / Countdown', defaultCategoryId: catSupermarketId },
-    { id: payeeLocalCornerId, name: 'City Convenience Store', defaultCategoryId: catConvenienceId },
-    { id: payeeCornerPubId, name: 'The Craft Bar & Taphouse', defaultCategoryId: catBarId },
-    { id: payeePastaBistroId, name: 'Bella Italia Restaurant', defaultCategoryId: catRestaurantId },
-    { id: payeeMojoId, name: 'Mojo Coffee', defaultCategoryId: catCoffeeId },
-    // Level 3 child defaults
-    { id: payeeMercuryId, name: 'Mercury Energy', defaultCategoryId: catElectricityId },
-    { id: payeeSparkId, name: 'Spark NZ', defaultCategoryId: catInternetId },
-    // Income child default
-    { id: payeeEmployerId, name: 'Employer Inc', defaultCategoryId: catSalaryId },
+    // Priority 0: Highest (quick-picks displayed before entry)
+    { id: payeePaknsaveId, name: "Pak'nSave", defaultCategoryId: catSupermarketId, priority: 0 },
+    { id: payeeMojoId, name: 'Mojo Coffee', defaultCategoryId: catCoffeeId, priority: 0 },
+
+    // Priority 1: Standard (current behaviour)
+    { id: payeeCountdownId, name: 'Woolworths / Countdown', defaultCategoryId: catSupermarketId, priority: 1 },
+    { id: payeeCornerPubId, name: 'The Craft Bar & Taphouse', defaultCategoryId: catBarId, priority: 1 },
+    { id: payeePastaBistroId, name: 'Bella Italia Restaurant', defaultCategoryId: catRestaurantId, priority: 1 },
+    { id: payeeMercuryId, name: 'Mercury Energy', defaultCategoryId: catElectricityId, priority: 1 },
+    { id: payeeSparkId, name: 'Spark NZ', defaultCategoryId: catInternetId, priority: 1 },
+    { id: payeeEmployerId, name: 'Employer Inc', defaultCategoryId: catSalaryId, priority: 1 },
+
+    // Priority 2: Low (appears at bottom of list even if better match)
+    { id: payeeLocalCornerId, name: 'City Convenience Store', defaultCategoryId: catConvenienceId, priority: 2 },
+
+    // Priority 3: Archived (hidden from selection lists, visible in existing transactions)
+    { id: payeeOldBakeryId, name: 'Old Corner Bakery (Closed)', defaultCategoryId: catConvenienceId, priority: 3 },
   ]).run();
 
   // 3. Account Groups
