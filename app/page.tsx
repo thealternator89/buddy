@@ -63,25 +63,19 @@ export default async function DashboardPage() {
             <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
               {acc.name}
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
-              <span className="capitalize">{acc.type}</span>
-              <span>•</span>
-              <span>{acc.transactionCount} txns</span>
-              {hasCreditLimit && (
-                <>
-                  <span>•</span>
+            {(hasCreditLimit || acc.excludeFromNetWorth) && (
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
+                {hasCreditLimit && (
                   <span className="text-blue-600 dark:text-blue-400 font-medium">
                     Limit: {formatCurrency(acc.creditLimitCents!)}
                   </span>
-                </>
-              )}
-              {acc.excludeFromNetWorth && (
-                <>
-                  <span>•</span>
+                )}
+                {hasCreditLimit && acc.excludeFromNetWorth && <span>•</span>}
+                {acc.excludeFromNetWorth && (
                   <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="text-right pl-2 shrink-0">

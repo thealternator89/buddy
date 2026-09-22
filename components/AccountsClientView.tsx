@@ -283,6 +283,17 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
     const isOver = dragOverAccountId === account.id && dragType === 'account';
     const isDragging = draggedAccountId === account.id;
 
+    const hasCreditLimit =
+      account.creditLimitCents !== null &&
+      account.creditLimitCents !== undefined &&
+      account.creditLimitCents > 0;
+    const showAvailable = hasCreditLimit && account.balanceDisplayMode === 'available';
+    const availableBalanceCents = hasCreditLimit
+      ? (account.availableBalanceCents ?? account.creditLimitCents! + account.balanceCents)
+      : account.balanceCents;
+    const primaryAmount = showAvailable ? availableBalanceCents : account.balanceCents;
+    const primaryLabel = showAvailable ? 'Available' : 'Current';
+
     return (
       <div
         key={account.id}
@@ -290,180 +301,166 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
         onDragLeave={(e) => handleAccountDragLeave(e, account.id)}
         onDrop={(e) => handleAccountDrop(e, account.id, account.groupId || null)}
         className={cn(
-          'relative flex flex-col justify-between rounded-2xl border bg-white p-5 shadow-xs transition-all dark:bg-zinc-900',
+          'group relative flex flex-col justify-between rounded-xl border bg-white p-3.5 sm:p-4 shadow-2xs transition-all dark:bg-zinc-900',
           isOver
             ? 'border-emerald-500 ring-2 ring-emerald-500/30 scale-[1.01]'
-            : 'border-zinc-200 hover:shadow-md dark:border-zinc-800',
+            : 'border-zinc-200 hover:border-zinc-300 hover:shadow-xs dark:border-zinc-800 dark:hover:border-zinc-700',
           isDragging && 'opacity-40 border-dashed border-zinc-400'
         )}
       >
         <div>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2.5 min-w-0">
+          {/* Header Row: Grip, Icon, Title & Meta, Actions */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {/* Account Drag Handle */}
               <div
                 draggable
                 onDragStart={(e) => handleAccountDragStart(e, account.id)}
                 onDragEnd={handleDragEnd}
-                className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-zinc-300 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
                 title="Drag to reorder account"
               >
-                <GripVertical className="h-4 w-4" />
+                <GripVertical className="h-3.5 w-3.5" />
               </div>
 
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <AccountIcon icon={account.icon} type={account.type} />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                <AccountIcon icon={account.icon} type={account.type} className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{account.name}</h3>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400 capitalize">
-                    {account.type}
+
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate" title={account.name}>
+                  {account.name}
+                </h3>
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex-wrap">
+                  <span className="capitalize">{account.type}</span>
+                  <span>•</span>
+                  <span>
+                    {account.transactionCount} {account.transactionCount === 1 ? 'txn' : 'txns'}
                   </span>
                   {account.excludeFromNetWorth && (
-                    <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
-                      Excluded from Net Worth
-                    </span>
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
+                    </>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0 ml-2">
+            {/* Action buttons */}
+            <div className="flex items-center gap-0.5 shrink-0 -mr-1 -mt-0.5">
               <button
                 type="button"
                 onClick={() => setEditingAccount(account)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
                 title="Edit account"
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-3.5 w-3.5" />
                 <span className="sr-only">Edit {account.name}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDeletingAccount(account)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-colors"
+                className="rounded-lg p-1 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-colors"
                 title="Delete account"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
                 <span className="sr-only">Delete {account.name}</span>
               </button>
             </div>
           </div>
 
-          {(() => {
-            const hasCreditLimit =
-              account.creditLimitCents !== null &&
-              account.creditLimitCents !== undefined &&
-              account.creditLimitCents > 0;
-            const showAvailable = hasCreditLimit && account.balanceDisplayMode === 'available';
-            const availableBalanceCents = hasCreditLimit
-              ? (account.availableBalanceCents ?? account.creditLimitCents! + account.balanceCents)
-              : account.balanceCents;
-            const primaryAmount = showAvailable ? availableBalanceCents : account.balanceCents;
-            const primaryLabel = showAvailable ? 'Available Balance' : 'Current Balance';
-
-            return (
-              <div className="mt-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    {primaryLabel}
-                  </span>
-                  {hasCreditLimit && (
-                    <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                      {showAvailable ? 'Showing available' : 'Showing actual'}
-                    </span>
-                  )}
-                </div>
-                <div
-                  className={`mt-1 text-2xl font-extrabold ${
-                    primaryAmount < 0
-                      ? 'text-rose-600 dark:text-rose-400'
-                      : 'text-zinc-900 dark:text-zinc-100'
-                  }`}
-                >
-                  {formatCurrency(primaryAmount)}
-                </div>
-
-                {hasCreditLimit && (
-                  <div className="mt-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-                      <span>
-                        {showAvailable ? (
-                          <>
-                            Actual:{' '}
-                            <strong
-                              className={
-                                account.balanceCents < 0
-                                  ? 'text-rose-600 dark:text-rose-400 font-semibold'
-                                  : 'text-zinc-700 dark:text-zinc-200 font-semibold'
-                              }
-                            >
-                              {formatCurrency(account.balanceCents)}
-                            </strong>
-                          </>
-                        ) : (
-                          <>
-                            Available:{' '}
-                            <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                              {formatCurrency(availableBalanceCents)}
-                            </strong>
-                          </>
-                        )}
-                      </span>
-                      <span>Limit: {formatCurrency(account.creditLimitCents!)}</span>
-                    </div>
-
-                    {/* Credit utilization bar */}
-                    {account.creditLimitCents! > 0 && (
-                      <div className="w-full bg-zinc-100 rounded-full h-1.5 dark:bg-zinc-800 overflow-hidden">
-                        <div
-                          className={cn(
-                            'h-1.5 rounded-full transition-all duration-300',
-                            account.balanceCents < 0
-                              ? Math.abs(account.balanceCents) / account.creditLimitCents! > 0.8
-                                ? 'bg-rose-500'
-                                : Math.abs(account.balanceCents) / account.creditLimitCents! > 0.5
-                                ? 'bg-amber-500'
-                                : 'bg-emerald-500'
-                              : 'bg-emerald-500'
-                          )}
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              Math.max(
-                                0,
-                                account.balanceCents < 0
-                                  ? Math.round(
-                                      (Math.abs(account.balanceCents) / account.creditLimitCents!) * 100
-                                    )
-                                  : 0
-                              )
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
+          {/* Balance & Ledger Row */}
+          <div className="mt-3 flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span
+                className={cn(
+                  'text-lg sm:text-xl font-bold tracking-tight truncate',
+                  primaryAmount < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-zinc-900 dark:text-zinc-100'
                 )}
+              >
+                {formatCurrency(primaryAmount)}
+              </span>
+              {hasCreditLimit && (
+                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500 shrink-0">
+                  {primaryLabel}
+                </span>
+              )}
+            </div>
+
+            <Link
+              href={`/transactions?account=${account.id}`}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 shrink-0 group/link"
+            >
+              <span>View Ledger</span>
+              <ArrowRight className="h-3 w-3 group-hover/link:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Credit details if applicable */}
+        {hasCreditLimit && (
+          <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 space-y-1">
+            {account.creditLimitCents! > 0 && (
+              <div className="w-full bg-zinc-100 rounded-full h-1.5 dark:bg-zinc-800 overflow-hidden">
+                <div
+                  className={cn(
+                    'h-1.5 rounded-full transition-all duration-300',
+                    account.balanceCents < 0
+                      ? Math.abs(account.balanceCents) / account.creditLimitCents! > 0.8
+                        ? 'bg-rose-500'
+                        : Math.abs(account.balanceCents) / account.creditLimitCents! > 0.5
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500'
+                      : 'bg-emerald-500'
+                  )}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        0,
+                        account.balanceCents < 0
+                          ? Math.round(
+                              (Math.abs(account.balanceCents) / account.creditLimitCents!) * 100
+                            )
+                          : 0
+                      )
+                    )}%`,
+                  }}
+                />
               </div>
-            );
-          })()}
-        </div>
+            )}
 
-        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs">
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {account.transactionCount}{' '}
-            {account.transactionCount === 1 ? 'transaction' : 'transactions'}
-          </span>
-
-          <Link
-            href={`/transactions?account=${account.id}`}
-            className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
-          >
-            View Ledger <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+            <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="truncate">
+                {showAvailable ? (
+                  <>
+                    Actual:{' '}
+                    <strong
+                      className={
+                        account.balanceCents < 0
+                          ? 'text-rose-600 dark:text-rose-400 font-medium'
+                          : 'text-zinc-700 dark:text-zinc-300 font-medium'
+                      }
+                    >
+                      {formatCurrency(account.balanceCents)}
+                    </strong>
+                  </>
+                ) : (
+                  <>
+                    Avail:{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400 font-medium">
+                      {formatCurrency(availableBalanceCents)}
+                    </strong>
+                  </>
+                )}
+              </span>
+              <span className="shrink-0 text-zinc-400">Limit: {formatCurrency(account.creditLimitCents!)}</span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -638,7 +635,7 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                     {groupAccounts.map((account) => renderAccountCard(account))}
                   </div>
                 )}
@@ -700,7 +697,7 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                 {ungroupedAccounts.map((account) => renderAccountCard(account))}
               </div>
             </section>
@@ -708,7 +705,7 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
         </div>
       ) : (
         /* Flat Grid View when no groups exist yet */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {localAccounts.map((account) => renderAccountCard(account))}
         </div>
       )}
