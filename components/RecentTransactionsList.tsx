@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
+import { deduplicateTransfers, getTransferDetails } from '@/lib/utils/transaction';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
@@ -26,16 +27,22 @@ export function RecentTransactionsList({
     null
   );
 
+  const displayedTransactions = useMemo(
+    () => deduplicateTransfers(transactions),
+    [transactions]
+  );
+
   return (
     <>
       <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-          {transactions.length === 0 ? (
+          {displayedTransactions.length === 0 ? (
             <div className="p-8 text-center text-zinc-400">No transactions recorded yet.</div>
           ) : (
-            transactions.map((tx) => {
-              const isTransfer = Boolean(tx.transferId);
-              const isIncome = tx.amountCents > 0;
+            displayedTransactions.map((tx) => {
+              const transferDetails = getTransferDetails(tx);
+              const isTransfer = transferDetails.isTransfer;
+              const isIncome = !isTransfer && tx.amountCents > 0;
 
               return (
                 <div
@@ -71,15 +78,23 @@ export function RecentTransactionsList({
                     </div>
 
                     <div className="min-w-0">
-                      <div className="font-semibold text-sm text-zinc-900 truncate dark:text-zinc-100">
+                      <div
+                        className={`font-semibold text-sm truncate ${
+                          isTransfer
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-zinc-900 dark:text-zinc-100'
+                        }`}
+                      >
                         {isTransfer
-                          ? `Transfer: ${tx.transferAccountName || 'Account'}`
+                          ? `Transfer: ${transferDetails.sourceAccountName}`
                           : tx.payeeName || 'Unassigned Payee'}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                         <span>{tx.date}</span>
                         <span>•</span>
-                        <span className="truncate">{tx.accountName}</span>
+                        <span className="truncate">
+                          {isTransfer ? transferDetails.targetAccountName : tx.accountName}
+                        </span>
                         {tx.categoryName && (
                           <>
                             <span>•</span>
@@ -96,14 +111,16 @@ export function RecentTransactionsList({
                   <div className="text-right whitespace-nowrap pl-4">
                     <div
                       className={`text-sm font-bold ${
-                        isIncome
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : isTransfer
+                        isTransfer
                           ? 'text-zinc-700 dark:text-zinc-300'
+                          : isIncome
+                          ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-zinc-900 dark:text-zinc-100'
                       }`}
                     >
-                      {formatCurrency(tx.amountCents, { showSign: isIncome })}
+                      {isTransfer
+                        ? formatCurrency(transferDetails.unsignedAmountCents)
+                        : formatCurrency(tx.amountCents, { showSign: isIncome })}
                     </div>
                     {tx.isCleared && (
                       <div className="text-[10px] text-zinc-400">Cleared</div>

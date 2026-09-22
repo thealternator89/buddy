@@ -8,6 +8,7 @@ import {
   toggleTransactionCleared,
 } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
+import { deduplicateTransfers, getTransferDetails } from '@/lib/utils/transaction';
 import { cn } from '@/lib/utils';
 import {
   Search,
@@ -223,6 +224,14 @@ export function TransactionTable({
       }));
   }, [payees, filterPayee]);
 
+  const isSpecificAccount = Boolean(filterAccount);
+
+  const displayedTransactions = useMemo(() => {
+    return isSpecificAccount
+      ? initialTransactions
+      : deduplicateTransfers(initialTransactions);
+  }, [initialTransactions, isSpecificAccount]);
+
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalCount);
   const pageNumbers = getPageNumbers(currentPage, totalPages);
@@ -330,16 +339,18 @@ export function TransactionTable({
               </tr>
             </thead>
             <tbody className={cn('divide-y divide-zinc-100 dark:divide-zinc-800/60 transition-opacity', isPending && 'opacity-60 pointer-events-none')}>
-              {initialTransactions.length === 0 ? (
+              {displayedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                     No transactions found matching the selected filters.
                   </td>
                 </tr>
               ) : (
-                initialTransactions.map((tx) => {
-                  const isTransfer = Boolean(tx.transferId);
-                  const isIncome = tx.amountCents > 0;
+                displayedTransactions.map((tx) => {
+                  const transferDetails = getTransferDetails(tx);
+                  const isTransfer = transferDetails.isTransfer;
+                  const isIncome = !isTransfer && tx.amountCents > 0;
+                  const isTransferInflow = isTransfer && tx.amountCents > 0;
 
                   return (
                     <tr
@@ -383,7 +394,9 @@ export function TransactionTable({
                       {/* Account */}
                       <td className="py-3 px-3 whitespace-nowrap">
                         <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                          {tx.accountName}
+                          {isTransfer && !isSpecificAccount
+                            ? transferDetails.targetAccountName
+                            : tx.accountName}
                         </span>
                       </td>
 
@@ -392,7 +405,11 @@ export function TransactionTable({
                         {isTransfer ? (
                           <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
                             <ArrowLeftRight className="h-3.5 w-3.5" />
-                            <span>Transfer: {tx.transferAccountName || 'Account'}</span>
+                            <span>
+                              {isSpecificAccount
+                                ? `Transfer: ${tx.transferAccountName || 'Account'}`
+                                : `Transfer: ${transferDetails.sourceAccountName}`}
+                            </span>
                           </div>
                         ) : (
                           tx.payeeName || <span className="text-zinc-400 italic">No Payee</span>
@@ -427,14 +444,18 @@ export function TransactionTable({
                       {/* Amount */}
                       <td
                         className={`py-3 px-4 text-right whitespace-nowrap font-semibold ${
-                          isIncome
+                          isTransfer && !isSpecificAccount
+                            ? 'text-zinc-700 dark:text-zinc-300'
+                            : isIncome || isTransferInflow
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : isTransfer
                             ? 'text-zinc-700 dark:text-zinc-300'
                             : 'text-zinc-900 dark:text-zinc-100'
                         }`}
                       >
-                        {formatCurrency(tx.amountCents, { showSign: isIncome })}
+                        {isTransfer && !isSpecificAccount
+                          ? formatCurrency(transferDetails.unsignedAmountCents)
+                          : formatCurrency(tx.amountCents, { showSign: isIncome || isTransferInflow })}
                       </td>
 
                       {/* Action buttons */}
