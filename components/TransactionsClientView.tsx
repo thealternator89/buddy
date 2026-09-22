@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { TransactionTable } from './TransactionTable';
 import { TransactionModal } from './TransactionModal';
+import { CsvImportModal } from './CsvImportModal';
 import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Upload } from 'lucide-react';
 
 interface TransactionsClientViewProps {
   transactions: TransactionWithDetails[];
@@ -31,6 +32,7 @@ export function TransactionsClientView({
   initialSearch,
 }: TransactionsClientViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -44,13 +46,22 @@ export function TransactionsClientView({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors self-start sm:self-auto"
-        >
-          <PlusCircle className="h-4 w-4" />
-          <span>New Transaction</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <Upload className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+            <span>Import CSV</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+          >
+            <PlusCircle className="h-4 w-4" />
+            <span>New Transaction</span>
+          </button>
+        </div>
       </div>
 
       <TransactionTable
@@ -72,6 +83,16 @@ export function TransactionsClientView({
           categories={categories}
           payees={payees}
           defaultAccountId={selectedAccountId}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <CsvImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          accounts={accounts}
+          categories={categories}
+          payees={payees}
         />
       )}
     </div>
