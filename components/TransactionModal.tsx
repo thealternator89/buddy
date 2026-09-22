@@ -12,6 +12,7 @@ import { APP_CONFIG } from '@/lib/constants';
 import { CurrencyInput } from './CurrencyInput';
 import { PayeeCombobox } from './PayeeCombobox';
 import { CategoryCombobox } from './CategoryCombobox';
+import { AccountCombobox } from './AccountCombobox';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -227,36 +228,34 @@ export function TransactionModal({
                 <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   From Account
                 </label>
-                <select
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <AccountCombobox
+                    accounts={accounts}
+                    value={accountId}
+                    onChange={(val) => {
+                      setAccountId(val);
+                      if (destAccountId === val) {
+                        const nextDest = accounts.find((a) => a.id !== val)?.id || '';
+                        setDestAccountId(nextDest);
+                      }
+                    }}
+                    placeholder="Select source account..."
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   To Account
                 </label>
-                <select
-                  value={destAccountId}
-                  onChange={(e) => setDestAccountId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                >
-                  {accounts
-                    .filter((a) => a.id !== accountId)
-                    .map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name}
-                      </option>
-                    ))}
-                </select>
+                <div className="mt-1">
+                  <AccountCombobox
+                    accounts={accounts.filter((a) => a.id !== accountId)}
+                    value={destAccountId}
+                    onChange={setDestAccountId}
+                    placeholder="Select destination account..."
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -267,17 +266,14 @@ export function TransactionModal({
                   <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                     Account
                   </label>
-                  <select
-                    value={accountId}
-                    onChange={(e) => setAccountId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                  >
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-1">
+                    <AccountCombobox
+                      accounts={accounts}
+                      value={accountId}
+                      onChange={setAccountId}
+                      placeholder="Select account..."
+                    />
+                  </div>
                 </div>
 
                 <div>

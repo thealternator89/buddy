@@ -28,6 +28,7 @@ import {
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { TransactionDetailModal } from './TransactionDetailModal';
 import { TableFilterDropdown, TableFilterOption } from './TableFilterDropdown';
+import { AccountCombobox } from './AccountCombobox';
 
 function getPageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) {
@@ -193,14 +194,6 @@ export function TransactionTable({
     return inputCategories as CategoryFlatItem[];
   }, [inputCategories]);
 
-  const accountOptions: TableFilterOption[] = useMemo(
-    () =>
-      accounts.map((acc) => ({
-        id: acc.id,
-        label: acc.name,
-      })),
-    [accounts]
-  );
 
   const categoryOptions: TableFilterOption[] = useMemo(
     () =>
@@ -276,11 +269,11 @@ export function TransactionTable({
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Account Filter */}
-          <TableFilterDropdown
-            allLabel="All Accounts"
+          <AccountCombobox
+            accounts={accounts}
             value={filterAccount}
-            options={accountOptions}
             onChange={handleAccountChange}
+            allLabel="All Accounts"
             searchPlaceholder="Filter accounts..."
             className="w-36 sm:w-44"
           />

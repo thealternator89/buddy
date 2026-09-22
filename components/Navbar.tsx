@@ -27,6 +27,7 @@ interface NavbarProps {
 export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarProps) {
   const pathname = usePathname();
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const isLedgerPage = pathname?.startsWith('/transactions');
 
   const navItems = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
@@ -80,15 +81,17 @@ export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarPr
           </div>
 
           {/* Action button */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsTxModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-950"
-            >
-              <PlusCircle className="h-4 w-4" />
-              <span>Record Transaction</span>
-            </button>
-          </div>
+          {!isLedgerPage && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsTxModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-950"
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span>Record Transaction</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Mobile Navigation bar */}
