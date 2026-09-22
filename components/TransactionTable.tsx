@@ -1,18 +1,23 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   TransactionWithDetails,
   deleteTransaction,
   toggleTransactionCleared,
 } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
+import { cn } from '@/lib/utils';
 import {
   Search,
   ArrowLeftRight,
   CheckCircle2,
   Circle,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import {
@@ -23,8 +28,30 @@ import {
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { TransactionDetailModal } from './TransactionDetailModal';
 
+function getPageNumbers(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, 'ellipsis', total];
+  }
+  if (current >= total - 3) {
+    return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
+}
+
 interface TransactionTableProps {
   initialTransactions: TransactionWithDetails[];
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+  summary?: {
+    totalAmountCents: number;
+  };
   accounts: AccountWithBalance[];
   categories: (CategoryNode | CategoryFlatItem)[];
   payees?: PayeeWithRules[];
@@ -36,6 +63,8 @@ interface TransactionTableProps {
 
 export function TransactionTable({
   initialTransactions,
+  pagination,
+  summary,
   accounts,
   categories: inputCategories,
   payees = [],
@@ -44,12 +73,116 @@ export function TransactionTable({
   selectedPayeeId,
   initialSearch,
 }: TransactionTableProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+
   const [search, setSearch] = useState(initialSearch || '');
   const [filterAccount, setFilterAccount] = useState(selectedAccountId || '');
   const [filterCategory, setFilterCategory] = useState(selectedCategoryId || '');
   const [filterPayee, setFilterPayee] = useState(selectedPayeeId || '');
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionWithDetails | null>(null);
-  const [, startTransition] = useTransition();
+
+  // Synchronize local states when props change (e.g. navigation / URL update)
+  useEffect(() => {
+    setSearch(initialSearch || '');
+  }, [initialSearch]);
+
+  useEffect(() => {
+    setFilterAccount(selectedAccountId || '');
+  }, [selectedAccountId]);
+
+  useEffect(() => {
+    setFilterCategory(selectedCategoryId || '');
+  }, [selectedCategoryId]);
+
+  useEffect(() => {
+    setFilterPayee(selectedPayeeId || '');
+  }, [selectedPayeeId]);
+
+  const updateQuery = (updates: {
+    account?: string;
+    category?: string;
+    payee?: string;
+    search?: string;
+    page?: number;
+  }) => {
+    const currentParams = new URLSearchParams(searchParams.toString());
+
+    const targetAccount = updates.account !== undefined ? updates.account : (currentParams.get('account') || '');
+    const targetCategory = updates.category !== undefined ? updates.category : (currentParams.get('category') || '');
+    const targetPayee = updates.payee !== undefined ? updates.payee : (currentParams.get('payee') || '');
+    const targetSearch = updates.search !== undefined ? updates.search : (currentParams.get('search') || '');
+    const targetPage = updates.page !== undefined ? updates.page : 1;
+
+    const newParams = new URLSearchParams();
+    if (targetAccount) newParams.set('account', targetAccount);
+    if (targetCategory) newParams.set('category', targetCategory);
+    if (targetPayee) newParams.set('payee', targetPayee);
+    if (targetSearch.trim()) newParams.set('search', targetSearch.trim());
+    if (targetPage > 1) newParams.set('page', targetPage.toString());
+
+    const qs = newParams.toString();
+    const url = qs ? `/transactions?${qs}` : '/transactions';
+
+    startTransition(() => {
+      router.push(url, { scroll: false });
+    });
+  };
+
+  // Debounced search query update
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search !== (initialSearch || '')) {
+        updateQuery({ search, page: 1 });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search, initialSearch]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      updateQuery({ search, page: 1 });
+    }
+  };
+
+  const handleAccountChange = (val: string) => {
+    setFilterAccount(val);
+    updateQuery({ account: val, page: 1 });
+  };
+
+  const handleCategoryChange = (val: string) => {
+    setFilterCategory(val);
+    updateQuery({ category: val, page: 1 });
+  };
+
+  const handlePayeeChange = (val: string) => {
+    setFilterPayee(val);
+    updateQuery({ payee: val, page: 1 });
+  };
+
+  const handleReset = () => {
+    setFilterAccount('');
+    setFilterCategory('');
+    setFilterPayee('');
+    setSearch('');
+    startTransition(() => {
+      router.push('/transactions', { scroll: false });
+    });
+  };
+
+  const currentPage = pagination?.page ?? 1;
+  const pageSize = pagination?.pageSize ?? 100;
+  const totalCount = pagination?.totalCount ?? initialTransactions.length;
+  const totalPages = pagination?.totalPages ?? Math.max(1, Math.ceil(totalCount / pageSize));
+
+  const handlePageChange = (p: number) => {
+    if (p >= 1 && p <= totalPages && p !== currentPage) {
+      updateQuery({ page: p });
+    }
+  };
 
   const flatCategories = useMemo<CategoryFlatItem[]>(() => {
     if (inputCategories.length === 0) return [];
@@ -59,43 +192,9 @@ export function TransactionTable({
     return inputCategories as CategoryFlatItem[];
   }, [inputCategories]);
 
-  // Subtree map for in-memory category filtering with rollups
-  const categorySubtreeMap = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const c of flatCategories) {
-      map.set(c.id, new Set([c.id]));
-    }
-    for (const c of flatCategories) {
-      let p = c.parentId;
-      while (p) {
-        map.get(p)?.add(c.id);
-        const parentItem = flatCategories.find((item) => item.id === p);
-        p = parentItem ? parentItem.parentId : null;
-      }
-    }
-    return map;
-  }, [flatCategories]);
-
-  // Filter transactions in-memory for instant response
-  const filtered = initialTransactions.filter((tx) => {
-    if (filterAccount && tx.accountId !== filterAccount) return false;
-    if (filterCategory) {
-      const allowed = categorySubtreeMap.get(filterCategory);
-      if (!allowed || !tx.categoryId || !allowed.has(tx.categoryId)) return false;
-    }
-    if (filterPayee && tx.payeeId !== filterPayee) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const matchPayee = tx.payeeName?.toLowerCase().includes(q);
-      const matchCat = tx.categoryName?.toLowerCase().includes(q);
-      const matchParentCat = tx.parentCategoryName?.toLowerCase().includes(q);
-      const matchAcc = tx.accountName.toLowerCase().includes(q);
-      const matchNotes = tx.notes?.toLowerCase().includes(q);
-      const matchTransfer = tx.transferAccountName?.toLowerCase().includes(q);
-      if (!matchPayee && !matchCat && !matchParentCat && !matchAcc && !matchNotes && !matchTransfer) return false;
-    }
-    return true;
-  });
+  const startItem = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalCount);
+  const pageNumbers = getPageNumbers(currentPage, totalPages);
 
   const handleToggleCleared = (id: string) => {
     startTransition(async () => {
@@ -121,11 +220,16 @@ export function TransactionTable({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          {isPending ? (
+            <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600 animate-spin" />
+          ) : (
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          )}
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             placeholder="Search payees, categories, notes..."
             className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm text-zinc-900 placeholder:text-zinc-400 shadow-xs focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
           />
@@ -136,7 +240,7 @@ export function TransactionTable({
           {/* Account Filter */}
           <select
             value={filterAccount}
-            onChange={(e) => setFilterAccount(e.target.value)}
+            onChange={(e) => handleAccountChange(e.target.value)}
             className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
           >
             <option value="">All Accounts</option>
@@ -150,7 +254,7 @@ export function TransactionTable({
           {/* Category Filter */}
           <select
             value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
+            onChange={(e) => handleCategoryChange(e.target.value)}
             className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 font-mono"
           >
             <option value="">All Categories</option>
@@ -169,7 +273,7 @@ export function TransactionTable({
           {payees.length > 0 && (
             <select
               value={filterPayee}
-              onChange={(e) => setFilterPayee(e.target.value)}
+              onChange={(e) => handlePayeeChange(e.target.value)}
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <option value="">All Payees</option>
@@ -191,12 +295,7 @@ export function TransactionTable({
 
           {(filterAccount || filterCategory || filterPayee || search) && (
             <button
-              onClick={() => {
-                setFilterAccount('');
-                setFilterCategory('');
-                setFilterPayee('');
-                setSearch('');
-              }}
+              onClick={handleReset}
               className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline px-1"
             >
               Reset
@@ -223,15 +322,15 @@ export function TransactionTable({
                 <th className="py-3.5 pr-4 pl-2 text-right w-10"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-              {filtered.length === 0 ? (
+            <tbody className={cn('divide-y divide-zinc-100 dark:divide-zinc-800/60 transition-opacity', isPending && 'opacity-60 pointer-events-none')}>
+              {initialTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                     No transactions found matching the selected filters.
                   </td>
                 </tr>
               ) : (
-                filtered.map((tx) => {
+                initialTransactions.map((tx) => {
                   const isTransfer = Boolean(tx.transferId);
                   const isIncome = tx.amountCents > 0;
 
@@ -353,18 +452,86 @@ export function TransactionTable({
           </table>
         </div>
 
-        {/* Footer Summary */}
-        <div className="flex items-center justify-between border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-400">
-          <span>
-            Showing {filtered.length} of {initialTransactions.length} transactions
-          </span>
+        {/* Footer Summary & Pagination */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-400">
+          <div className="flex items-center gap-2">
+            <span>
+              {totalCount === 0 ? (
+                'No transactions'
+              ) : (
+                <>
+                  Showing <strong className="text-zinc-800 dark:text-zinc-200">{startItem}</strong> to{' '}
+                  <strong className="text-zinc-800 dark:text-zinc-200">{endItem}</strong> of{' '}
+                  <strong className="text-zinc-800 dark:text-zinc-200">{totalCount}</strong> transactions
+                </>
+              )}
+            </span>
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1 self-center sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1 || isPending}
+                className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                title="Previous Page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {pageNumbers.map((p, idx) =>
+                p === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400 select-none">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => handlePageChange(p)}
+                    disabled={isPending}
+                    className={cn(
+                      'inline-flex items-center justify-center h-8 min-w-8 px-2.5 rounded-lg text-xs font-semibold transition-colors',
+                      p === currentPage
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                    )}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+
+              <button
+                type="button"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages || isPending}
+                className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                title="Next Page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Totals */}
           <div className="flex items-center gap-4">
             <span>
-              Net Total:{' '}
+              Page Net:{' '}
               <strong className="text-zinc-900 dark:text-zinc-100">
-                {formatCurrency(filtered.reduce((acc, t) => acc + t.amountCents, 0))}
+                {formatCurrency(initialTransactions.reduce((acc, t) => acc + t.amountCents, 0))}
               </strong>
             </span>
+            {summary !== undefined && (
+              <span>
+                Total Net:{' '}
+                <strong className="text-zinc-900 dark:text-zinc-100">
+                  {formatCurrency(summary.totalAmountCents)}
+                </strong>
+              </span>
+            )}
           </div>
         </div>
       </div>

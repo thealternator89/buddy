@@ -5,7 +5,7 @@ import { accounts, categories, payees, transactions, payeeRules } from '@/lib/db
 import { getOrCreatePayee } from './payees';
 import { getCategorySubtreeIds } from './categories';
 import { resolvePayeeCategory, RuleOperator } from '@/lib/payee-rules';
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, like, lte, or, sql, SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
@@ -44,19 +44,37 @@ export interface TransactionFilters {
   endDate?: string;
   search?: string;
   limit?: number;
+  offset?: number;
+  page?: number;
+  pageSize?: number;
 }
 
-export async function getTransactions(
+export interface PaginatedTransactionsResult {
+  transactions: TransactionWithDetails[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+  summary: {
+    totalAmountCents: number;
+  };
+}
+
+export async function getPaginatedTransactions(
   filters: TransactionFilters = {}
-): Promise<TransactionWithDetails[]> {
-  const conditions = [];
+): Promise<PaginatedTransactionsResult> {
+  const conditions: (SQL | undefined)[] = [];
 
   if (filters.accountId) {
     conditions.push(eq(transactions.accountId, filters.accountId));
   }
   if (filters.categoryId) {
     const subtreeIds = await getCategorySubtreeIds(filters.categoryId);
-    conditions.push(inArray(transactions.categoryId, subtreeIds));
+    if (subtreeIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, subtreeIds));
+    }
   }
   if (filters.payeeId) {
     conditions.push(eq(transactions.payeeId, filters.payeeId));
@@ -70,8 +88,48 @@ export async function getTransactions(
 
   const parentCategories = alias(categories, 'parent_categories');
 
-  // Base query with joins
-  const query = db
+  if (filters.search && filters.search.trim()) {
+    const term = `%${filters.search.trim()}%`;
+    conditions.push(
+      or(
+        like(transactions.notes, term),
+        like(accounts.name, term),
+        like(payees.name, term),
+        like(categories.name, term),
+        like(parentCategories.name, term)
+      )
+    );
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  // 1. Get total count and aggregate net total for all matching items
+  const countQuery = db
+    .select({
+      count: sql<number>`count(*)`,
+      totalAmountCents: sql<number>`coalesce(sum(${transactions.amountCents}), 0)`,
+    })
+    .from(transactions)
+    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(payees, eq(transactions.payeeId, payees.id))
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id));
+
+  const countResult = whereClause
+    ? await countQuery.where(whereClause)
+    : await countQuery;
+
+  const totalCount = Number(countResult[0]?.count ?? 0);
+  const totalAmountCents = Number(countResult[0]?.totalAmountCents ?? 0);
+
+  const pageSize = filters.pageSize || filters.limit || 100;
+  const rawPage = filters.page || 1;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const page = Math.min(Math.max(1, rawPage), totalPages);
+  const offset = filters.offset !== undefined ? filters.offset : (page - 1) * pageSize;
+
+  // 2. Base query with joins
+  const dataQuery = db
     .select({
       id: transactions.id,
       accountId: transactions.accountId,
@@ -93,24 +151,13 @@ export async function getTransactions(
     .leftJoin(payees, eq(transactions.payeeId, payees.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+    .orderBy(desc(transactions.date), desc(transactions.createdAt))
+    .limit(pageSize)
+    .offset(offset);
 
-  let results =
-    conditions.length > 0
-      ? await query.where(and(...conditions)).limit(filters.limit || 500)
-      : await query.limit(filters.limit || 500);
-
-  // Search filter across payee, category, notes, and account
-  if (filters.search && filters.search.trim()) {
-    const q = filters.search.trim().toLowerCase();
-    results = results.filter(
-      (tx) =>
-        tx.notes?.toLowerCase().includes(q) ||
-        tx.payeeName?.toLowerCase().includes(q) ||
-        tx.categoryName?.toLowerCase().includes(q) ||
-        tx.accountName?.toLowerCase().includes(q)
-    );
-  }
+  const results = whereClause
+    ? await dataQuery.where(whereClause)
+    : await dataQuery;
 
   // Identify transfer counterpart accounts
   const transferIds = results
@@ -133,10 +180,33 @@ export async function getTransactions(
     }
   }
 
-  return results.map((tx) => ({
+  const mappedTransactions = results.map((tx) => ({
     ...tx,
     transferAccountName: tx.transferId ? transferAccountMap.get(tx.transferId) || null : null,
   }));
+
+  return {
+    transactions: mappedTransactions,
+    pagination: {
+      page,
+      pageSize,
+      totalCount,
+      totalPages,
+    },
+    summary: {
+      totalAmountCents,
+    },
+  };
+}
+
+export async function getTransactions(
+  filters: TransactionFilters = {}
+): Promise<TransactionWithDetails[]> {
+  const result = await getPaginatedTransactions({
+    ...filters,
+    pageSize: filters.limit ?? 100,
+  });
+  return result.transactions;
 }
 
 export type CreateTransactionInput =

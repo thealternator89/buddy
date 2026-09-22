@@ -12,6 +12,15 @@ import { PlusCircle, Upload } from 'lucide-react';
 
 interface TransactionsClientViewProps {
   transactions: TransactionWithDetails[];
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+  summary?: {
+    totalAmountCents: number;
+  };
   accounts: AccountWithBalance[];
   categories: (CategoryNode | CategoryFlatItem)[];
   payees: PayeeWithRules[];
@@ -23,6 +32,8 @@ interface TransactionsClientViewProps {
 
 export function TransactionsClientView({
   transactions,
+  pagination,
+  summary,
   accounts,
   categories,
   payees,
@@ -66,6 +77,8 @@ export function TransactionsClientView({
 
       <TransactionTable
         initialTransactions={transactions}
+        pagination={pagination}
+        summary={summary}
         accounts={accounts}
         categories={categories}
         payees={payees}
