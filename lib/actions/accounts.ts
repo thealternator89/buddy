@@ -1,11 +1,13 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { accountGroups, accounts, transactions } from '@/lib/db/schema';
+import { accountGroups, accounts, transactions, BalanceDisplayMode } from '@/lib/db/schema';
 import { AccountType } from '@/lib/constants';
 import { eq, inArray, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
+
+export type { BalanceDisplayMode };
 
 export interface AccountWithBalance {
   id: string;
@@ -20,6 +22,9 @@ export interface AccountWithBalance {
   isArchived: boolean;
   balanceCents: number;
   transactionCount: number;
+  creditLimitCents?: number | null;
+  balanceDisplayMode: BalanceDisplayMode;
+  availableBalanceCents?: number | null;
 }
 
 export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
@@ -34,6 +39,8 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       icon: accounts.icon,
       sortOrder: accounts.sortOrder,
       excludeFromNetWorth: accounts.excludeFromNetWorth,
+      creditLimitCents: accounts.creditLimitCents,
+      balanceDisplayMode: accounts.balanceDisplayMode,
       isArchived: accounts.isArchived,
     })
     .from(accounts)
@@ -61,6 +68,10 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
 
   return allAccounts.map((acc) => {
     const stats = balanceMap.get(acc.id) || { total: 0, count: 0 };
+    const creditLimitCents = acc.creditLimitCents ?? null;
+    const availableBalanceCents =
+      creditLimitCents !== null ? creditLimitCents + stats.total : null;
+
     return {
       id: acc.id,
       groupId: acc.groupId || null,
@@ -74,6 +85,9 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       isArchived: acc.isArchived,
       balanceCents: stats.total,
       transactionCount: stats.count,
+      creditLimitCents,
+      balanceDisplayMode: (acc.balanceDisplayMode as BalanceDisplayMode) || 'actual',
+      availableBalanceCents,
     };
   });
 }
@@ -92,6 +106,8 @@ export async function createAccount(data: {
   groupId?: string | null;
   icon?: string | null;
   excludeFromNetWorth?: boolean;
+  creditLimitCents?: number | null;
+  balanceDisplayMode?: BalanceDisplayMode;
   startingBalanceCents?: number;
 }) {
   const accountId = crypto.randomUUID();
@@ -118,6 +134,8 @@ export async function createAccount(data: {
       icon: data.icon || null,
       sortOrder: nextSortOrder,
       excludeFromNetWorth: Boolean(data.excludeFromNetWorth),
+      creditLimitCents: data.creditLimitCents !== undefined ? data.creditLimitCents : null,
+      balanceDisplayMode: data.balanceDisplayMode || 'actual',
       isArchived: false,
     })
     .run();
@@ -151,6 +169,8 @@ export async function updateAccount(
     groupId?: string | null;
     icon?: string | null;
     excludeFromNetWorth?: boolean;
+    creditLimitCents?: number | null;
+    balanceDisplayMode?: BalanceDisplayMode;
   }
 ) {
   const updatePayload: Partial<typeof accounts.$inferInsert> = {
@@ -188,6 +208,12 @@ export async function updateAccount(
   if (data.icon !== undefined) updatePayload.icon = data.icon;
   if (data.excludeFromNetWorth !== undefined) {
     updatePayload.excludeFromNetWorth = data.excludeFromNetWorth;
+  }
+  if (data.creditLimitCents !== undefined) {
+    updatePayload.creditLimitCents = data.creditLimitCents;
+  }
+  if (data.balanceDisplayMode !== undefined) {
+    updatePayload.balanceDisplayMode = data.balanceDisplayMode;
   }
 
   db.update(accounts).set(updatePayload).where(eq(accounts.id, id)).run();

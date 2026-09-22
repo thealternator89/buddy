@@ -3,7 +3,12 @@
 import { useState, useTransition } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { AccountType, APP_CONFIG } from '@/lib/constants';
-import { AccountWithBalance, createAccount, updateAccount } from '@/lib/actions/accounts';
+import {
+  AccountWithBalance,
+  BalanceDisplayMode,
+  createAccount,
+  updateAccount,
+} from '@/lib/actions/accounts';
 import { formatCurrency } from '@/lib/utils/currency';
 import { CurrencyInput } from './CurrencyInput';
 import { IconPicker } from './IconPicker';
@@ -38,6 +43,15 @@ export function AccountModal({
   );
   const [startingBalanceCents, setStartingBalanceCents] = useState<number>(0);
   const [isDebt, setIsDebt] = useState(false);
+  const [hasCreditLimit, setHasCreditLimit] = useState<boolean>(
+    Boolean(account?.creditLimitCents !== undefined && account?.creditLimitCents !== null && account?.creditLimitCents > 0)
+  );
+  const [creditLimitCents, setCreditLimitCents] = useState<number>(
+    account?.creditLimitCents ?? 0
+  );
+  const [balanceDisplayMode, setBalanceDisplayMode] = useState<BalanceDisplayMode>(
+    account?.balanceDisplayMode || 'actual'
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -47,6 +61,7 @@ export function AccountModal({
     setType(newType);
     if (!isEditing && newType === 'credit') {
       setIsDebt(true);
+      setHasCreditLimit(true);
     }
   };
 
@@ -57,6 +72,9 @@ export function AccountModal({
       return;
     }
 
+    const finalCreditLimit = hasCreditLimit && creditLimitCents > 0 ? creditLimitCents : null;
+    const finalDisplayMode = hasCreditLimit && creditLimitCents > 0 ? balanceDisplayMode : 'actual';
+
     startTransition(async () => {
       try {
         if (isEditing && account) {
@@ -66,6 +84,8 @@ export function AccountModal({
             groupId,
             icon,
             excludeFromNetWorth,
+            creditLimitCents: finalCreditLimit,
+            balanceDisplayMode: finalDisplayMode,
           });
         } else {
           const finalCents = isDebt ? -startingBalanceCents : startingBalanceCents;
@@ -75,6 +95,8 @@ export function AccountModal({
             groupId,
             icon,
             excludeFromNetWorth,
+            creditLimitCents: finalCreditLimit,
+            balanceDisplayMode: finalDisplayMode,
             startingBalanceCents: finalCents,
           });
         }
@@ -195,11 +217,83 @@ export function AccountModal({
             </label>
           </div>
 
+          {/* Credit Limit & Balance Display Mode */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hasCreditLimit}
+                onChange={(e) => setHasCreditLimit(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+              />
+              <div>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Set Credit Limit
+                </span>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Optional limit for credit cards, overdrafts, or lines of credit.
+                </p>
+              </div>
+            </label>
+
+            {hasCreditLimit && (
+              <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-700/60 space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    Credit Limit ({APP_CONFIG.currency.code})
+                  </label>
+                  <div className="mt-1">
+                    <CurrencyInput
+                      valueCents={creditLimitCents}
+                      onChangeCents={setCreditLimitCents}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+                    Balance Display
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBalanceDisplayMode('actual')}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        balanceDisplayMode === 'actual'
+                          ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 font-semibold ring-1 ring-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500/50'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-750'
+                      }`}
+                    >
+                      <div className="font-semibold">Actual Balance</div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Shows current balance or debt owed
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBalanceDisplayMode('available')}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        balanceDisplayMode === 'available'
+                          ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 font-semibold ring-1 ring-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500/50'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-750'
+                      }`}
+                    >
+                      <div className="font-semibold">Available Balance</div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Shows remaining spending capacity
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Balance Preview or Starting Balance */}
           {isEditing && account ? (
             <div className="rounded-xl bg-zinc-50 p-3.5 border border-zinc-200/80 dark:bg-zinc-800/50 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-zinc-600 dark:text-zinc-300">Current Balance</span>
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">Actual Balance</span>
                 <span
                   className={`font-bold text-sm ${
                     account.balanceCents < 0
@@ -210,7 +304,29 @@ export function AccountModal({
                   {formatCurrency(account.balanceCents)}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              {hasCreditLimit && creditLimitCents > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-zinc-600 dark:text-zinc-300">Credit Limit</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      {formatCurrency(creditLimitCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-zinc-600 dark:text-zinc-300">Available Balance</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(creditLimitCents + account.balanceCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
+                    <span className="text-zinc-400 dark:text-zinc-500">Prominently Displayed:</span>
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                      {balanceDisplayMode === 'available' ? 'Available Balance' : 'Actual Balance'}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-200/50 dark:border-zinc-700/50">
                 <span className="font-medium text-zinc-600 dark:text-zinc-300">Total Transactions</span>
                 <span className="font-medium text-zinc-700 dark:text-zinc-200">
                   {account.transactionCount} {account.transactionCount === 1 ? 'transaction' : 'transactions'}
@@ -263,6 +379,31 @@ export function AccountModal({
               <p className="mt-1 text-xs text-zinc-400">
                 Enter cents directly (e.g. 1-2-5-0 = $12.50).
               </p>
+
+              {hasCreditLimit && creditLimitCents > 0 && (
+                <div className="mt-2.5 rounded-lg bg-zinc-50 p-2.5 border border-zinc-200/80 text-xs dark:bg-zinc-800/40 dark:border-zinc-800 space-y-1">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-zinc-500 dark:text-zinc-400">Credit Limit:</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      {formatCurrency(creditLimitCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-zinc-500 dark:text-zinc-400">Starting Balance:</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      {formatCurrency(isDebt ? -startingBalanceCents : startingBalanceCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px] pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60 font-bold">
+                    <span className="text-zinc-600 dark:text-zinc-300">Initial Available:</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(
+                        creditLimitCents + (isDebt ? -startingBalanceCents : startingBalanceCents)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

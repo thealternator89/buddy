@@ -116,7 +116,16 @@ export async function seed() {
     { id: accCheckingId, groupId: grpEverydayId, name: 'Everyday Checking', type: 'checking', icon: 'Wallet', sortOrder: 1 },
     { id: accCashId, groupId: grpEverydayId, name: 'Cash Wallet', type: 'cash', icon: 'Banknote', sortOrder: 2 },
     { id: accSavingsId, groupId: grpSavingsId, name: 'High Interest Savings', type: 'savings', icon: 'PiggyBank', sortOrder: 1 },
-    { id: accCreditId, groupId: grpCardsId, name: 'Visa Rewards Card', type: 'credit', icon: 'CreditCard', sortOrder: 1 },
+    {
+      id: accCreditId,
+      groupId: grpCardsId,
+      name: 'Visa Rewards Card',
+      type: 'credit',
+      icon: 'CreditCard',
+      sortOrder: 1,
+      creditLimitCents: 500000,
+      balanceDisplayMode: 'available',
+    },
   ]).run();
 
   // 5. Initial / Sample Transactions

@@ -351,20 +351,104 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
             </div>
           </div>
 
-          <div className="mt-6">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Current Balance
-            </span>
-            <div
-              className={`mt-1 text-2xl font-extrabold ${
-                account.balanceCents < 0
-                  ? 'text-rose-600 dark:text-rose-400'
-                  : 'text-zinc-900 dark:text-zinc-100'
-              }`}
-            >
-              {formatCurrency(account.balanceCents)}
-            </div>
-          </div>
+          {(() => {
+            const hasCreditLimit =
+              account.creditLimitCents !== null &&
+              account.creditLimitCents !== undefined &&
+              account.creditLimitCents > 0;
+            const showAvailable = hasCreditLimit && account.balanceDisplayMode === 'available';
+            const availableBalanceCents = hasCreditLimit
+              ? (account.availableBalanceCents ?? account.creditLimitCents! + account.balanceCents)
+              : account.balanceCents;
+            const primaryAmount = showAvailable ? availableBalanceCents : account.balanceCents;
+            const primaryLabel = showAvailable ? 'Available Balance' : 'Current Balance';
+
+            return (
+              <div className="mt-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    {primaryLabel}
+                  </span>
+                  {hasCreditLimit && (
+                    <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      {showAvailable ? 'Showing available' : 'Showing actual'}
+                    </span>
+                  )}
+                </div>
+                <div
+                  className={`mt-1 text-2xl font-extrabold ${
+                    primaryAmount < 0
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-zinc-900 dark:text-zinc-100'
+                  }`}
+                >
+                  {formatCurrency(primaryAmount)}
+                </div>
+
+                {hasCreditLimit && (
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                      <span>
+                        {showAvailable ? (
+                          <>
+                            Actual:{' '}
+                            <strong
+                              className={
+                                account.balanceCents < 0
+                                  ? 'text-rose-600 dark:text-rose-400 font-semibold'
+                                  : 'text-zinc-700 dark:text-zinc-200 font-semibold'
+                              }
+                            >
+                              {formatCurrency(account.balanceCents)}
+                            </strong>
+                          </>
+                        ) : (
+                          <>
+                            Available:{' '}
+                            <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                              {formatCurrency(availableBalanceCents)}
+                            </strong>
+                          </>
+                        )}
+                      </span>
+                      <span>Limit: {formatCurrency(account.creditLimitCents!)}</span>
+                    </div>
+
+                    {/* Credit utilization bar */}
+                    {account.creditLimitCents! > 0 && (
+                      <div className="w-full bg-zinc-100 rounded-full h-1.5 dark:bg-zinc-800 overflow-hidden">
+                        <div
+                          className={cn(
+                            'h-1.5 rounded-full transition-all duration-300',
+                            account.balanceCents < 0
+                              ? Math.abs(account.balanceCents) / account.creditLimitCents! > 0.8
+                                ? 'bg-rose-500'
+                                : Math.abs(account.balanceCents) / account.creditLimitCents! > 0.5
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
+                              : 'bg-emerald-500'
+                          )}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                account.balanceCents < 0
+                                  ? Math.round(
+                                      (Math.abs(account.balanceCents) / account.creditLimitCents!) * 100
+                                    )
+                                  : 0
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs">

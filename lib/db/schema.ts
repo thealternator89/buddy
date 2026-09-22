@@ -30,6 +30,10 @@ export const accounts = sqliteTable('accounts', {
   excludeFromNetWorth: integer('exclude_from_net_worth', { mode: 'boolean' })
     .notNull()
     .default(false),
+  creditLimitCents: integer('credit_limit_cents'),
+  balanceDisplayMode: text('balance_display_mode', { enum: ['actual', 'available'] })
+    .notNull()
+    .default('actual'),
   isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
@@ -164,4 +168,5 @@ export type PayeeRule = typeof payeeRules.$inferSelect;
 export type NewPayeeRule = typeof payeeRules.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type BalanceDisplayMode = 'actual' | 'available';
 

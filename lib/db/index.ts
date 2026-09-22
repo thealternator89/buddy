@@ -28,12 +28,22 @@ const sqlite =
       const columns = client.pragma('table_info(accounts)') as Array<{ name: string }>;
       const columnNames = new Set(columns.map((c) => c.name));
       if (columnNames.size > 0) {
-        if (!columnNames.has('icon')) {
-          client.exec('ALTER TABLE accounts ADD COLUMN icon TEXT');
-        }
-        if (!columnNames.has('exclude_from_net_worth')) {
-          client.exec('ALTER TABLE accounts ADD COLUMN exclude_from_net_worth INTEGER NOT NULL DEFAULT 0');
-        }
+        const safeAddCol = (col: string, sql: string) => {
+          if (!columnNames.has(col)) {
+            try {
+              client.exec(sql);
+            } catch (err: unknown) {
+              if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
+                throw err;
+              }
+            }
+          }
+        };
+
+        safeAddCol('icon', 'ALTER TABLE accounts ADD COLUMN icon TEXT');
+        safeAddCol('exclude_from_net_worth', 'ALTER TABLE accounts ADD COLUMN exclude_from_net_worth INTEGER NOT NULL DEFAULT 0');
+        safeAddCol('credit_limit_cents', 'ALTER TABLE accounts ADD COLUMN credit_limit_cents INTEGER');
+        safeAddCol('balance_display_mode', "ALTER TABLE accounts ADD COLUMN balance_display_mode TEXT NOT NULL DEFAULT 'actual'");
       }
 
       // 2. Categories hierarchy migration (from category_groups to parent_id)

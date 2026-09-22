@@ -102,6 +102,8 @@ erDiagram
    - `icon` (text, optional Lucide icon key)
    - `sort_order` (integer, default 0)
    - `exclude_from_net_worth` (boolean integer, default 0)
+   - `credit_limit_cents` (integer, optional)
+   - `balance_display_mode` (text enum: `actual`, `available`, default `actual`)
    - `is_archived` (boolean integer, default 0)
    - `created_at`, `updated_at` (timestamps)
 
@@ -154,7 +156,17 @@ erDiagram
 - **Zero-Cents Protection**: Inputs in UI components (`CurrencyInput.tsx`) parse raw user input directly into integer cents using regex and round-half-up math to prevent rounding bugs.
 - **Formatting**: `lib/utils/currency.ts` formats cents into localized currency strings based on the centralized `APP_CONFIG` in `lib/constants.ts`.
 
-### 3.2 Category Tree Hierarchy & Aggregation Engine
+### 3.2 Credit Limits & Available Balance Calculation
+
+Accounts can optionally define a credit limit (`credit_limit_cents`) and a display preference (`balance_display_mode: 'actual' | 'available'`):
+- **Available Balance**: Calculated as $\text{availableBalanceCents} = \text{creditLimitCents} + \text{balanceCents}$.
+  Because debts are signed negative (e.g., $-\$487.50$), an account with a $\$5,000.00$ limit yields an available balance of $\$4,512.50$.
+- **Display Modes**:
+  - `'actual'`: Prominently displays the current ledger balance (e.g. debt owed), with secondary notes indicating available credit.
+  - `'available'`: Prominently displays the available credit capacity, with secondary notes indicating actual ledger balance.
+- **Net Worth Invariance**: Net worth and balance aggregations across groups strictly sum actual balances (`balanceCents`), preserving financial integrity regardless of credit line limits.
+
+### 3.3 Category Tree Hierarchy & Aggregation Engine
 
 Categories are modeled as an **Adjacency List** with self-referencing `parent_id` pointers, supporting arbitrary tree depth (Roots $\rightarrow$ Subcategories $\rightarrow$ Sub-subcategories, etc.).
 

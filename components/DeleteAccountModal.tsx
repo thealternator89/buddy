@@ -67,7 +67,15 @@ export function DeleteAccountModal({
           <div className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
             <p className="font-semibold">Warning: Destructive Action</p>
             <p className="mt-1">
-              This account has <span className="font-bold">{account.transactionCount}</span> {account.transactionCount === 1 ? 'transaction' : 'transactions'} with a balance of <span className="font-bold">{formatCurrency(account.balanceCents)}</span>.
+              This account has <span className="font-bold">{account.transactionCount}</span>{' '}
+              {account.transactionCount === 1 ? 'transaction' : 'transactions'} with a balance of{' '}
+              <span className="font-bold">{formatCurrency(account.balanceCents)}</span>
+              {account.creditLimitCents !== null &&
+                account.creditLimitCents !== undefined &&
+                account.creditLimitCents > 0 && (
+                  <span> (Credit Limit: {formatCurrency(account.creditLimitCents)})</span>
+                )}
+              .
             </p>
             <p className="mt-1">
               Deleting this account will permanently remove it and all associated transactions. Any inter-account transfers will be unlinked.

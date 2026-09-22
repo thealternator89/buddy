@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getAccountsWithBalances } from '@/lib/actions/accounts';
+import { getAccountsWithBalances, AccountWithBalance } from '@/lib/actions/accounts';
 import { getAccountGroups } from '@/lib/actions/account-groups';
 import { getTransactions } from '@/lib/actions/transactions';
 import { getFlatCategories } from '@/lib/actions/categories';
@@ -37,6 +37,74 @@ export default async function DashboardPage() {
       };
     })
     .filter((g) => g.accounts.length > 0);
+
+  const renderDashboardAccountItem = (acc: AccountWithBalance) => {
+    const hasCreditLimit =
+      acc.creditLimitCents !== null &&
+      acc.creditLimitCents !== undefined &&
+      acc.creditLimitCents > 0;
+    const showAvailable = hasCreditLimit && acc.balanceDisplayMode === 'available';
+    const availableBalanceCents = hasCreditLimit
+      ? (acc.availableBalanceCents ?? acc.creditLimitCents! + acc.balanceCents)
+      : acc.balanceCents;
+    const displayAmount = showAvailable ? availableBalanceCents : acc.balanceCents;
+
+    return (
+      <Link
+        key={acc.id}
+        href={`/transactions?account=${acc.id}`}
+        className="group flex items-center justify-between p-3.5 rounded-xl border border-zinc-200 bg-white shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+            <AccountIcon icon={acc.icon} type={acc.type} className="h-4 w-4" />
+          </div>
+          <div className="space-y-0.5 min-w-0">
+            <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
+              {acc.name}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
+              <span className="capitalize">{acc.type}</span>
+              <span>•</span>
+              <span>{acc.transactionCount} txns</span>
+              {hasCreditLimit && (
+                <>
+                  <span>•</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-medium">
+                    Limit: {formatCurrency(acc.creditLimitCents!)}
+                  </span>
+                </>
+              )}
+              {acc.excludeFromNetWorth && (
+                <>
+                  <span>•</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="text-right pl-2 shrink-0">
+          <div
+            className={`text-sm font-bold ${
+              displayAmount < 0
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-zinc-900 dark:text-zinc-100'
+            }`}
+          >
+            {formatCurrency(displayAmount)}
+          </div>
+          {hasCreditLimit && (
+            <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+              {showAvailable
+                ? `Actual: ${formatCurrency(acc.balanceCents)}`
+                : `Avail: ${formatCurrency(availableBalanceCents)}`}
+            </div>
+          )}
+        </div>
+      </Link>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -85,44 +153,7 @@ export default async function DashboardPage() {
                   </div>
 
                   <div className="space-y-3">
-                    {group.accounts.map((acc) => (
-                      <Link
-                        key={acc.id}
-                        href={`/transactions?account=${acc.id}`}
-                        className="group flex items-center justify-between p-3.5 rounded-xl border border-zinc-200 bg-white shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                            <AccountIcon icon={acc.icon} type={acc.type} className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
-                              {acc.name}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                              <span className="capitalize">{acc.type}</span>
-                              <span>•</span>
-                              <span>{acc.transactionCount} txns</span>
-                              {acc.excludeFromNetWorth && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          className={`text-sm font-bold pl-2 shrink-0 ${
-                            acc.balanceCents < 0
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : 'text-zinc-900 dark:text-zinc-100'
-                          }`}
-                        >
-                          {formatCurrency(acc.balanceCents)}
-                        </div>
-                      </Link>
-                    ))}
+                    {group.accounts.map((acc) => renderDashboardAccountItem(acc))}
                   </div>
                 </div>
               ))}
@@ -140,88 +171,14 @@ export default async function DashboardPage() {
                   </div>
 
                   <div className="space-y-3">
-                    {ungroupedAccounts.map((acc) => (
-                      <Link
-                        key={acc.id}
-                        href={`/transactions?account=${acc.id}`}
-                        className="group flex items-center justify-between p-3.5 rounded-xl border border-zinc-200 bg-white shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                            <AccountIcon icon={acc.icon} type={acc.type} className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
-                              {acc.name}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                              <span className="capitalize">{acc.type}</span>
-                              <span>•</span>
-                              <span>{acc.transactionCount} txns</span>
-                              {acc.excludeFromNetWorth && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          className={`text-sm font-bold pl-2 shrink-0 ${
-                            acc.balanceCents < 0
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : 'text-zinc-900 dark:text-zinc-100'
-                          }`}
-                        >
-                          {formatCurrency(acc.balanceCents)}
-                        </div>
-                      </Link>
-                    ))}
+                    {ungroupedAccounts.map((acc) => renderDashboardAccountItem(acc))}
                   </div>
                 </div>
               )}
             </div>
           ) : (
             <div className="space-y-3">
-              {accounts.map((acc) => (
-                <Link
-                  key={acc.id}
-                  href={`/transactions?account=${acc.id}`}
-                  className="group flex items-center justify-between p-4 rounded-xl border border-zinc-200 bg-white shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                      <AccountIcon icon={acc.icon} type={acc.type} className="h-4 w-4" />
-                    </div>
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="font-semibold text-sm text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400">
-                        {acc.name}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        <span className="capitalize">{acc.type}</span>
-                        <span>•</span>
-                        <span>{acc.transactionCount} txns</span>
-                        {acc.excludeFromNetWorth && (
-                          <>
-                            <span>•</span>
-                            <span className="text-amber-600 dark:text-amber-400 font-medium">Excluded</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className={`text-sm font-bold pl-2 shrink-0 ${
-                      acc.balanceCents < 0
-                        ? 'text-rose-600 dark:text-rose-400'
-                        : 'text-zinc-900 dark:text-zinc-100'
-                    }`}
-                  >
-                    {formatCurrency(acc.balanceCents)}
-                  </div>
-                </Link>
-              ))}
+              {accounts.map((acc) => renderDashboardAccountItem(acc))}
             </div>
           )}
         </div>
