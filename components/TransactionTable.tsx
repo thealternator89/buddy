@@ -21,6 +21,7 @@ import {
   flattenCategoryTree,
 } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
+import { TransactionDetailModal } from './TransactionDetailModal';
 
 interface TransactionTableProps {
   initialTransactions: TransactionWithDetails[];
@@ -47,6 +48,7 @@ export function TransactionTable({
   const [filterAccount, setFilterAccount] = useState(selectedAccountId || '');
   const [filterCategory, setFilterCategory] = useState(selectedCategoryId || '');
   const [filterPayee, setFilterPayee] = useState(selectedPayeeId || '');
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionWithDetails | null>(null);
   const [, startTransition] = useTransition();
 
   const flatCategories = useMemo<CategoryFlatItem[]>(() => {
@@ -236,13 +238,26 @@ export function TransactionTable({
                   return (
                     <tr
                       key={tx.id}
-                      className="group hover:bg-zinc-50/75 transition-colors dark:hover:bg-zinc-800/40"
+                      tabIndex={0}
+                      onClick={() => setSelectedTransaction(tx)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          if ((e.target as HTMLElement).tagName !== 'BUTTON') {
+                            e.preventDefault();
+                            setSelectedTransaction(tx);
+                          }
+                        }
+                      }}
+                      className="group cursor-pointer hover:bg-zinc-50/75 transition-colors dark:hover:bg-zinc-800/40 focus:outline-none focus-visible:bg-zinc-50 dark:focus-visible:bg-zinc-800/60"
                     >
                       {/* Cleared Toggle */}
                       <td className="py-3 pl-4 pr-2 text-center">
                         <button
                           type="button"
-                          onClick={() => handleToggleCleared(tx.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleCleared(tx.id);
+                          }}
                           className="text-zinc-300 hover:text-emerald-600 dark:text-zinc-600 dark:hover:text-emerald-400 transition-colors"
                           title={tx.isCleared ? 'Mark Uncleared' : 'Mark Cleared'}
                         >
@@ -320,7 +335,10 @@ export function TransactionTable({
                       <td className="py-3 pr-4 pl-2 text-right whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => handleDelete(tx.id, isTransfer)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(tx.id, isTransfer);
+                          }}
                           className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-rose-600 transition-opacity"
                           title="Delete transaction"
                         >
@@ -350,6 +368,12 @@ export function TransactionTable({
           </div>
         </div>
       </div>
+
+      <TransactionDetailModal
+        isOpen={Boolean(selectedTransaction)}
+        onClose={() => setSelectedTransaction(null)}
+        transaction={selectedTransaction}
+      />
     </div>
   );
 }
