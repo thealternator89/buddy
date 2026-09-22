@@ -27,6 +27,7 @@ import {
 } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { TransactionDetailModal } from './TransactionDetailModal';
+import { TableFilterDropdown, TableFilterOption } from './TableFilterDropdown';
 
 function getPageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) {
@@ -192,6 +193,43 @@ export function TransactionTable({
     return inputCategories as CategoryFlatItem[];
   }, [inputCategories]);
 
+  const accountOptions: TableFilterOption[] = useMemo(
+    () =>
+      accounts.map((acc) => ({
+        id: acc.id,
+        label: acc.name,
+      })),
+    [accounts]
+  );
+
+  const categoryOptions: TableFilterOption[] = useMemo(
+    () =>
+      flatCategories.map((cat) => ({
+        id: cat.id,
+        label: cat.name,
+        subtext: cat.path.length > 1 ? cat.path.slice(0, -1).join(' › ') : undefined,
+        depth: cat.depth,
+      })),
+    [flatCategories]
+  );
+
+  const payeeOptions: TableFilterOption[] = useMemo(() => {
+    return payees
+      .filter((p) => (p.priority ?? 1) !== 3 || p.id === filterPayee)
+      .sort((a, b) => {
+        const prioA = a.priority ?? 1;
+        const prioB = b.priority ?? 1;
+        if (prioA !== prioB) return prioA - prioB;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      })
+      .map((p) => ({
+        id: p.id,
+        label: p.name,
+        isFavorite: (p.priority ?? 1) === 0,
+        badge: (p.priority ?? 1) === 3 ? 'Archived' : undefined,
+      }));
+  }, [payees, filterPayee]);
+
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalCount);
   const pageNumbers = getPageNumbers(currentPage, totalPages);
@@ -217,9 +255,9 @@ export function TransactionTable({
   return (
     <div className="space-y-4">
       {/* Controls Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Search */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 min-w-[240px] max-w-xl">
           {isPending ? (
             <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600 animate-spin" />
           ) : (
@@ -236,67 +274,43 @@ export function TransactionTable({
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Account Filter */}
-          <select
+          <TableFilterDropdown
+            allLabel="All Accounts"
             value={filterAccount}
-            onChange={(e) => handleAccountChange(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
-          >
-            <option value="">All Accounts</option>
-            {accounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name}
-              </option>
-            ))}
-          </select>
+            options={accountOptions}
+            onChange={handleAccountChange}
+            searchPlaceholder="Filter accounts..."
+            className="w-36 sm:w-44"
+          />
 
           {/* Category Filter */}
-          <select
+          <TableFilterDropdown
+            allLabel="All Categories"
             value={filterCategory}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 font-mono"
-          >
-            <option value="">All Categories</option>
-            {flatCategories.map((cat) => {
-              const indent = '  '.repeat(cat.depth);
-              const prefix = cat.depth > 0 ? '↳ ' : '● ';
-              return (
-                <option key={cat.id} value={cat.id}>
-                  {indent}{prefix}{cat.name}
-                </option>
-              );
-            })}
-          </select>
+            options={categoryOptions}
+            onChange={handleCategoryChange}
+            searchPlaceholder="Filter categories..."
+            className="w-40 sm:w-48"
+          />
 
           {/* Payee Filter */}
           {payees.length > 0 && (
-            <select
+            <TableFilterDropdown
+              allLabel="All Payees"
               value={filterPayee}
-              onChange={(e) => handlePayeeChange(e.target.value)}
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs sm:text-sm text-zinc-800 shadow-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
-            >
-              <option value="">All Payees</option>
-              {payees
-                .filter((p) => (p.priority ?? 1) !== 3 || p.id === filterPayee)
-                .sort((a, b) => {
-                  const prioA = a.priority ?? 1;
-                  const prioB = b.priority ?? 1;
-                  if (prioA !== prioB) return prioA - prioB;
-                  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-                })
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {(p.priority ?? 1) === 0 ? '⭐ ' : ''}{p.name}{(p.priority ?? 1) === 3 ? ' (Archived)' : ''}
-                  </option>
-                ))}
-            </select>
+              options={payeeOptions}
+              onChange={handlePayeeChange}
+              searchPlaceholder="Filter payees..."
+              className="w-36 sm:w-48"
+            />
           )}
 
           {(filterAccount || filterCategory || filterPayee || search) && (
             <button
               onClick={handleReset}
-              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline px-1"
+              className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline px-1 shrink-0"
             >
               Reset
             </button>
