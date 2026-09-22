@@ -2,7 +2,7 @@
 
 import { db, sqlite } from '@/lib/db';
 import { accounts, categories, payees, transactions, payeeRules } from '@/lib/db/schema';
-import { parseCsv, ParsedCsvRow } from '@/lib/csv';
+import { parseCsv, parseCsvCategory, ParsedCsvRow } from '@/lib/csv';
 import { resolvePayeeCategory, PayeeRuleItem, RuleOperator } from '@/lib/payee-rules';
 import { asc, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -386,7 +386,8 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
 
         let categoryId: string | null = null;
         if (row.categoryName) {
-          categoryId = getOrCreateCategory(row.categoryName);
+          const resolvedCategory = parseCsvCategory(row.categoryName) || row.categoryName;
+          categoryId = getOrCreateCategory(resolvedCategory);
         }
 
         let payeeId: string | null = null;

@@ -27,6 +27,13 @@ export interface ParsedCsvRow {
   error?: string;
 }
 
+export interface ParsedCategorySplit {
+  category: string;
+  amountCents: number;
+  absAmountCents: number;
+  rawAmount: string;
+}
+
 export interface CsvParseSummary {
   rows: ParsedCsvRow[];
   totalRows: number;
@@ -181,6 +188,70 @@ export function parseCsvAmount(raw: string | number | undefined | null): {
 }
 
 /**
+ * Parses multiple categories with amounts from a raw category string.
+ * Example: "Entertainment (-$29.99), Entertainment Subscription (-$16.99)"
+ * Returns an array of ParsedCategorySplit items.
+ */
+export function parseCategorySplits(raw: string): ParsedCategorySplit[] {
+  if (!raw || !raw.trim()) return [];
+
+  const splits: ParsedCategorySplit[] = [];
+  // Matches "<CategoryName> (<Amount>)" followed by comma/semicolon or end of string.
+  // The amount pattern requires at least one digit and allows currency symbols, signs, decimals, and commas.
+  const regex = /(.*?)\s*\(([-+$€£¥A-Za-z\s]*\d[\d,.]*(?:\s*[A-Za-z]+)?)\)(?:\s*[,;]\s*|$)/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(raw)) !== null) {
+    const category = match[1].trim();
+    const rawAmount = match[2].trim();
+
+    // Guard against zero-length match loop
+    if (match.index === regex.lastIndex) {
+      regex.lastIndex++;
+    }
+
+    if (!category) continue;
+
+    const amountResult = parseCsvAmount(rawAmount);
+    if (!amountResult.error) {
+      splits.push({
+        category,
+        amountCents: amountResult.cents,
+        absAmountCents: Math.abs(amountResult.cents),
+        rawAmount,
+      });
+    }
+  }
+
+  return splits;
+}
+
+/**
+ * Resolves a raw category field from a CSV row into a single category name.
+ * If multiple categories with amounts exist (e.g. "Entertainment (-$29.99), Entertainment Subscription (-$16.99)"),
+ * selects the category with the highest absolute value.
+ * Otherwise returns the trimmed category string or null if empty.
+ */
+export function parseCsvCategory(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const splits = parseCategorySplits(trimmed);
+  if (splits.length > 0) {
+    let best = splits[0];
+    for (let i = 1; i < splits.length; i++) {
+      if (splits[i].absAmountCents > best.absAmountCents) {
+        best = splits[i];
+      }
+    }
+    return best.category;
+  }
+
+  return trimmed;
+}
+
+/**
  * Parses CSV text content into structured, validated rows using PapaParse.
  */
 export function parseCsv(csvContent: string): CsvParseSummary {
@@ -202,6 +273,7 @@ export function parseCsv(csvContent: string): CsvParseSummary {
     const rawDate = row.date ? String(row.date).trim() : '';
     const rawDescription = row.description ? String(row.description).trim() : '';
     const rawCategory = row.category ? String(row.category).trim() : '';
+    const parsedCategory = parseCsvCategory(rawCategory);
     const rawPayee = row.payee ? String(row.payee).trim() : '';
     const rawNotes = row.notes ? String(row.notes).trim() : '';
     const rawAccount = row.account ? String(row.account).trim() : '';
@@ -241,14 +313,14 @@ export function parseCsv(csvContent: string): CsvParseSummary {
 
     if (rawAccount) accountsSet.add(rawAccount);
     if (rawTransferAccount) accountsSet.add(rawTransferAccount);
-    if (rawCategory) categoriesSet.add(rawCategory);
+    if (parsedCategory) categoriesSet.add(parsedCategory);
     if (rawPayee) payeesSet.add(rawPayee);
 
     parsedRows.push({
       rowIndex,
       date: parsedDate || rawDate,
       description: rawDescription || null,
-      categoryName: rawCategory || null,
+      categoryName: parsedCategory,
       payeeName: rawPayee || null,
       notes: mergedNotes,
       accountName: rawAccount,
