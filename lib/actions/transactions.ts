@@ -32,6 +32,7 @@ export interface TransactionWithDetails {
   notes: string | null;
   isCleared: boolean;
   transferId: string | null;
+  transferAccountId?: string | null;
   transferAccountName?: string | null;
   createdAt: Date;
 }
@@ -164,11 +165,12 @@ export async function getPaginatedTransactions(
     .map((t) => t.transferId)
     .filter((id): id is string => Boolean(id));
 
-  const transferAccountMap = new Map<string, string>();
+  const transferAccountMap = new Map<string, { accountId: string; accountName: string }>();
   if (transferIds.length > 0) {
     const pairedTxs = await db
       .select({
         id: transactions.id,
+        accountId: transactions.accountId,
         accountName: accounts.name,
       })
       .from(transactions)
@@ -176,14 +178,21 @@ export async function getPaginatedTransactions(
       .where(sql`${transactions.id} IN ${transferIds}`);
 
     for (const pt of pairedTxs) {
-      transferAccountMap.set(pt.id, pt.accountName);
+      transferAccountMap.set(pt.id, {
+        accountId: pt.accountId,
+        accountName: pt.accountName,
+      });
     }
   }
 
-  const mappedTransactions = results.map((tx) => ({
-    ...tx,
-    transferAccountName: tx.transferId ? transferAccountMap.get(tx.transferId) || null : null,
-  }));
+  const mappedTransactions = results.map((tx) => {
+    const counterpart = tx.transferId ? transferAccountMap.get(tx.transferId) : null;
+    return {
+      ...tx,
+      transferAccountId: counterpart ? counterpart.accountId : null,
+      transferAccountName: counterpart ? counterpart.accountName : null,
+    };
+  });
 
   return {
     transactions: mappedTransactions,
@@ -337,6 +346,8 @@ export async function updateTransaction(
     date?: string;
     notes?: string | null;
     isCleared?: boolean;
+    sourceAccountId?: string;
+    destinationAccountId?: string;
   }
 ) {
   const current = await db
@@ -352,31 +363,42 @@ export async function updateTransaction(
   if (tx.transferId) {
     const absAmount = input.amountCents !== undefined ? Math.abs(input.amountCents) : null;
     const isOutflow = tx.amountCents < 0;
+    const sourceTxId = isOutflow ? id : tx.transferId;
+    const destTxId = isOutflow ? tx.transferId : id;
 
-    // Update current
+    const newSourceAccountId = input.sourceAccountId || (isOutflow ? input.accountId : undefined);
+    const newDestAccountId = input.destinationAccountId || (!isOutflow ? input.accountId : undefined);
+
+    if (newSourceAccountId && newDestAccountId && newSourceAccountId === newDestAccountId) {
+      throw new Error('Source and destination accounts must be different for transfers');
+    }
+
+    const cleanedNotes = input.notes !== undefined ? (input.notes?.trim() || null) : undefined;
+
+    // Update source leg
     db.update(transactions)
       .set({
-        amountCents:
-          absAmount !== null ? (isOutflow ? -absAmount : absAmount) : undefined,
+        accountId: newSourceAccountId,
+        amountCents: absAmount !== null ? -absAmount : undefined,
         date: input.date,
-        notes: input.notes,
+        notes: cleanedNotes,
         isCleared: input.isCleared,
         updatedAt: new Date(),
       })
-      .where(eq(transactions.id, id))
+      .where(eq(transactions.id, sourceTxId))
       .run();
 
-    // Update counterpart
+    // Update destination leg
     db.update(transactions)
       .set({
-        amountCents:
-          absAmount !== null ? (isOutflow ? absAmount : -absAmount) : undefined,
+        accountId: newDestAccountId,
+        amountCents: absAmount !== null ? absAmount : undefined,
         date: input.date,
-        notes: input.notes,
+        notes: cleanedNotes,
         isCleared: input.isCleared,
         updatedAt: new Date(),
       })
-      .where(eq(transactions.id, tx.transferId))
+      .where(eq(transactions.id, destTxId))
       .run();
   } else {
     let payeeId = tx.payeeId;
@@ -389,14 +411,16 @@ export async function updateTransaction(
       }
     }
 
+    const cleanedNotes = input.notes !== undefined ? (input.notes?.trim() || null) : undefined;
+
     db.update(transactions)
       .set({
         accountId: input.accountId,
         payeeId,
-        categoryId: input.categoryId,
+        categoryId: input.categoryId !== undefined ? (input.categoryId || null) : undefined,
         amountCents: input.amountCents,
         date: input.date,
-        notes: input.notes,
+        notes: cleanedNotes,
         isCleared: input.isCleared,
         updatedAt: new Date(),
       })

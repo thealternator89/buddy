@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { getAccountsWithBalances } from '@/lib/actions/accounts';
 import { getAccountGroups } from '@/lib/actions/account-groups';
 import { getTransactions } from '@/lib/actions/transactions';
+import { getFlatCategories } from '@/lib/actions/categories';
+import { getPayees } from '@/lib/actions/payees';
 import { formatCurrency } from '@/lib/utils/currency';
 import { APP_CONFIG } from '@/lib/constants';
 import { AccountIcon } from '@/components/AccountIcon';
@@ -13,10 +15,12 @@ import {
 } from 'lucide-react';
 
 export default async function DashboardPage() {
-  const [accounts, recentTransactions, groups] = await Promise.all([
+  const [accounts, recentTransactions, groups, categories, payees] = await Promise.all([
     getAccountsWithBalances(),
     getTransactions({ limit: 8 }),
     getAccountGroups(),
+    getFlatCategories(),
+    getPayees(),
   ]);
 
   // Group accounts for overview display
@@ -234,7 +238,12 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          <RecentTransactionsList transactions={recentTransactions} />
+          <RecentTransactionsList
+            transactions={recentTransactions}
+            accounts={accounts}
+            categories={categories}
+            payees={payees}
+          />
         </div>
       </div>
     </div>

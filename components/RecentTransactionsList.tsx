@@ -4,13 +4,24 @@ import { useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
+import { AccountWithBalance } from '@/lib/actions/accounts';
+import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
+import { PayeeWithRules } from '@/lib/actions/payees';
 import { TransactionDetailModal } from './TransactionDetailModal';
 
 interface RecentTransactionsListProps {
   transactions: TransactionWithDetails[];
+  accounts?: AccountWithBalance[];
+  categories?: (CategoryNode | CategoryFlatItem)[];
+  payees?: PayeeWithRules[];
 }
 
-export function RecentTransactionsList({ transactions }: RecentTransactionsListProps) {
+export function RecentTransactionsList({
+  transactions,
+  accounts = [],
+  categories = [],
+  payees = [],
+}: RecentTransactionsListProps) {
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionWithDetails | null>(
     null
   );
@@ -109,6 +120,9 @@ export function RecentTransactionsList({ transactions }: RecentTransactionsListP
         isOpen={Boolean(selectedTransaction)}
         onClose={() => setSelectedTransaction(null)}
         transaction={selectedTransaction}
+        accounts={accounts}
+        categories={categories}
+        payees={payees}
       />
     </>
   );

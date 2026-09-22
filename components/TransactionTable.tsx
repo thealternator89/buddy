@@ -547,6 +547,9 @@ export function TransactionTable({
         isOpen={Boolean(selectedTransaction)}
         onClose={() => setSelectedTransaction(null)}
         transaction={selectedTransaction}
+        accounts={accounts}
+        categories={inputCategories}
+        payees={payees}
       />
     </div>
   );
