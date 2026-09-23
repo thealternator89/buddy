@@ -17,7 +17,6 @@ import {
   ArrowRight,
   Tag,
   AlertCircle,
-  CheckCircle2,
   Sliders,
   Star,
 } from 'lucide-react';
@@ -52,15 +51,11 @@ export function PayeesTab({
     return inputCategories as CategoryFlatItem[];
   }, [inputCategories]);
 
-  // Compute stats
-  const totalPayees = payees.length;
+  // Compute priority counts for filter dropdown
   const highestCount = payees.filter((p) => (p.priority ?? 1) === 0).length;
   const standardCount = payees.filter((p) => (p.priority ?? 1) === 1).length;
   const lowCount = payees.filter((p) => (p.priority ?? 1) === 2).length;
   const archivedCount = payees.filter((p) => (p.priority ?? 1) === 3).length;
-  const categorizedCount = payees.filter((p) => Boolean(p.defaultCategoryId)).length;
-  const rulesCount = payees.filter((p) => p.rules && p.rules.length > 0).length;
-  const uncategorizedCount = totalPayees - categorizedCount;
 
   // Filter & sort payees
   const filteredPayees = useMemo(() => {
@@ -124,97 +119,6 @@ export function PayeesTab({
 
   return (
     <div className="space-y-6">
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Total Payees
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-              <Building2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {totalPayees}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">registered</span>
-          </div>
-          {archivedCount > 0 && (
-            <p className="mt-1 text-xs text-zinc-400">
-              {archivedCount} archived
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Highest Priority
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <Star className="h-4 w-4 fill-emerald-500" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {highestCount}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">quick-picks</span>
-          </div>
-          <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-            Shown before typing in selection box
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Default Categories
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {categorizedCount}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              ({totalPayees > 0 ? Math.round((categorizedCount / totalPayees) * 100) : 0}%)
-            </span>
-          </div>
-          {uncategorizedCount > 0 && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              {uncategorizedCount} {uncategorizedCount === 1 ? 'payee needs' : 'payees need'} a default
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Amount Rules
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
-              <Sliders className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {rulesCount}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {rulesCount === 1 ? 'payee has rules' : 'payees have rules'}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Closest threshold wins
-          </p>
-        </div>
-      </div>
-
       {/* Filter and Search Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-md">

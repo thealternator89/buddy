@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { archiveCategory } from '@/lib/actions/categories';
 import { CategoryNode, flattenCategoryTree } from '@/lib/category-utils';
 import { CategoryModal, EditCategoryData } from './CategoryModal';
-import { formatCurrency } from '@/lib/utils/currency';
 import {
   PlusCircle,
   FolderTree,
@@ -36,9 +35,6 @@ export function CategoriesClientView({
   const [isPending, startTransition] = useTransition();
 
   const flatCategories = flattenCategoryTree(categoryTree);
-  const totalCategories = flatCategories.length;
-  const rootCategoriesCount = categoryTree.length;
-  const totalOverallSpent = categoryTree.reduce((acc, root) => acc + root.totalSpentCents, 0);
 
   const toggleCollapse = (id: string) => {
     setCollapsedIds((prev) => {
@@ -162,59 +158,43 @@ export function CategoriesClientView({
             </div>
           </div>
 
-          {/* Right section: financial telemetry & row actions */}
-          <div className="flex items-center gap-4 shrink-0">
-            {/* Spending stats */}
-            <div className="text-right">
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                {formatCurrency(node.totalSpentCents)}
-              </div>
-              <div className="flex items-center justify-end gap-1 text-[11px] text-zinc-400">
-                {hasChildren && node.directSpentCents > 0 && (
-                  <span>({formatCurrency(node.directSpentCents)} direct) • </span>
-                )}
-                <span>{node.totalTransactionCount} txns</span>
-              </div>
-            </div>
+          {/* Row actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Link
+              href={`/transactions?category=${node.id}`}
+              className="rounded-md p-1.5 text-zinc-400 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 transition-colors"
+              title={`View transactions for ${node.name}`}
+            >
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
-              <Link
-                href={`/transactions?category=${node.id}`}
-                className="rounded-md p-1.5 text-zinc-400 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 transition-colors"
-                title={`View transactions for ${node.name}`}
-              >
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+            <button
+              type="button"
+              onClick={() => handleAddSubcategory(node.id)}
+              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600 dark:hover:bg-zinc-800 dark:hover:text-emerald-400 transition-colors"
+              title={`Add subcategory under ${node.name}`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleAddSubcategory(node.id)}
-                className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600 dark:hover:bg-zinc-800 dark:hover:text-emerald-400 transition-colors"
-                title={`Add subcategory under ${node.name}`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+            <button
+              type="button"
+              onClick={() => handleEditCategory(node)}
+              className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+              title="Edit category"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleEditCategory(node)}
-                className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
-                title="Edit category"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleArchiveCategory(node)}
-                disabled={isPending}
-                className="rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
-                title="Archive category"
-              >
-                <Archive className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleArchiveCategory(node)}
+              disabled={isPending}
+              className="rounded-md p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors disabled:opacity-50"
+              title="Archive category"
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -250,60 +230,6 @@ export function CategoriesClientView({
           </button>
         </div>
       )}
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Top-Level Categories
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-              <Folder className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {rootCategoriesCount}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">root groups</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Total Categories
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <Tag className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {totalCategories}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">across all levels</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Total Tracked Spend
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
-              <FolderTree className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {formatCurrency(totalOverallSpent)}
-            </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">categorized</span>
-          </div>
-        </div>
-      </div>
 
       {/* Main Category Tree Explorer */}
       <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
