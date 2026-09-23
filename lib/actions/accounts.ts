@@ -14,6 +14,7 @@ export interface AccountWithBalance {
   groupId?: string | null;
   groupName?: string | null;
   groupIcon?: string | null;
+  groupSortOrder?: number | null;
   name: string;
   type: AccountType;
   icon?: string | null;
@@ -34,6 +35,7 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       groupId: accounts.groupId,
       groupName: accountGroups.name,
       groupIcon: accountGroups.icon,
+      groupSortOrder: accountGroups.sortOrder,
       name: accounts.name,
       type: accounts.type,
       icon: accounts.icon,
@@ -46,7 +48,15 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
     .from(accounts)
     .leftJoin(accountGroups, eq(accounts.groupId, accountGroups.id))
     .where(eq(accounts.isArchived, false))
-    .orderBy(asc(accounts.sortOrder), asc(accounts.createdAt), asc(accounts.name));
+    .orderBy(
+      sql`case when ${accounts.groupId} is null or ${accountGroups.id} is null then 1 else 0 end`,
+      asc(accountGroups.sortOrder),
+      asc(accountGroups.createdAt),
+      asc(accountGroups.name),
+      asc(accounts.sortOrder),
+      asc(accounts.createdAt),
+      asc(accounts.name)
+    );
 
   // Compute balance per account from transactions
   const balances = await db
@@ -77,6 +87,7 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       groupId: acc.groupId || null,
       groupName: acc.groupName || null,
       groupIcon: acc.groupIcon || null,
+      groupSortOrder: acc.groupSortOrder ?? null,
       name: acc.name,
       type: acc.type as AccountType,
       icon: acc.icon || null,

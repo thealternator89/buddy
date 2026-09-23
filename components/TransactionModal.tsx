@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Sparkles, Check } from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
+import { sortAccountsByGroupAndOrder } from '@/lib/account-utils';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { resolvePayeeCategory, formatRuleCondition, RuleMatchResult } from '@/lib/payee-rules';
@@ -33,10 +34,11 @@ export function TransactionModal({
   payees,
   defaultAccountId,
 }: TransactionModalProps) {
+  const sortedAccounts = useMemo(() => sortAccountsByGroupAndOrder(accounts), [accounts]);
   const [type, setType] = useState<TxType>('expense');
-  const [accountId, setAccountId] = useState(defaultAccountId || accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(defaultAccountId || sortedAccounts[0]?.id || '');
   const [destAccountId, setDestAccountId] = useState(
-    accounts.find((a) => a.id !== (defaultAccountId || accounts[0]?.id))?.id || ''
+    sortedAccounts.find((a) => a.id !== (defaultAccountId || sortedAccounts[0]?.id))?.id || ''
   );
   const [payeeName, setPayeeName] = useState('');
   const [selectedPayeeObj, setSelectedPayeeObj] = useState<PayeeWithRules | null>(null);
@@ -230,12 +232,12 @@ export function TransactionModal({
                 </label>
                 <div className="mt-1">
                   <AccountCombobox
-                    accounts={accounts}
+                    accounts={sortedAccounts}
                     value={accountId}
                     onChange={(val) => {
                       setAccountId(val);
                       if (destAccountId === val) {
-                        const nextDest = accounts.find((a) => a.id !== val)?.id || '';
+                        const nextDest = sortedAccounts.find((a) => a.id !== val)?.id || '';
                         setDestAccountId(nextDest);
                       }
                     }}
@@ -250,7 +252,7 @@ export function TransactionModal({
                 </label>
                 <div className="mt-1">
                   <AccountCombobox
-                    accounts={accounts.filter((a) => a.id !== accountId)}
+                    accounts={sortedAccounts.filter((a) => a.id !== accountId)}
                     value={destAccountId}
                     onChange={setDestAccountId}
                     placeholder="Select destination account..."
@@ -268,7 +270,7 @@ export function TransactionModal({
                   </label>
                   <div className="mt-1">
                     <AccountCombobox
-                      accounts={accounts}
+                      accounts={sortedAccounts}
                       value={accountId}
                       onChange={setAccountId}
                       placeholder="Select account..."

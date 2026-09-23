@@ -188,6 +188,7 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
       groupId: targetGroupId,
       groupName: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.name || null : null,
       groupIcon: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.icon || null : null,
+      groupSortOrder: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.sortOrder ?? null : null,
     };
 
     const newAccounts = [...remaining];
@@ -239,6 +240,7 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
       groupId: targetGroupId,
       groupName: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.name || null : null,
       groupIcon: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.icon || null : null,
+      groupSortOrder: targetGroupId ? localGroups.find((g) => g.id === targetGroupId)?.sortOrder ?? null : null,
     };
 
     const newAccounts = [...remaining, updatedDragged];

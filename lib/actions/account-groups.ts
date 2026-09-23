@@ -245,5 +245,6 @@ export async function reorderAccountGroups(orderedGroupIds: string[]) {
 
   safeRevalidatePath('/');
   safeRevalidatePath('/accounts');
+  safeRevalidatePath('/transactions');
   return { success: true };
 }

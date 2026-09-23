@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
+import { sortAccountsByGroupAndOrder } from '@/lib/account-utils';
 import { Search, Check, ChevronDown, X, Wallet } from 'lucide-react';
 import { AccountIcon } from './AccountIcon';
 import { cn } from '@/lib/utils';
@@ -71,17 +72,22 @@ export function AccountCombobox({
     }
   }, [isOpen]);
 
+  // Sort accounts primarily by group sort order, secondarily by account sort order
+  const sortedAccounts = useMemo(() => {
+    return sortAccountsByGroupAndOrder(accounts);
+  }, [accounts]);
+
   const trimmedSearch = search.trim().toLowerCase();
 
   // Search filter
   const filteredAccounts = useMemo(() => {
-    if (!trimmedSearch) return accounts;
-    return accounts.filter(
+    if (!trimmedSearch) return sortedAccounts;
+    return sortedAccounts.filter(
       (a) =>
         a.name.toLowerCase().includes(trimmedSearch) ||
         (a.groupName && a.groupName.toLowerCase().includes(trimmedSearch))
     );
-  }, [accounts, trimmedSearch]);
+  }, [sortedAccounts, trimmedSearch]);
 
   const handleSelect = (accountId: string) => {
     onChange(accountId);
