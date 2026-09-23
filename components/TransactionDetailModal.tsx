@@ -116,24 +116,19 @@ function TransactionEditForm({
   const [error, setError] = useState<string | null>(null);
 
   const applyPayeeCategory = (targetPayee: PayeeWithRules | null, amount: number) => {
-    if (!targetPayee) return;
+    if (!targetPayee) {
+      setCategorySuggestion(null);
+      return;
+    }
     const match = resolvePayeeCategory(targetPayee, amount);
     if (match) {
       setCategoryId(match.categoryId);
       setCategorySuggestion(match);
+    } else {
+      setCategorySuggestion(null);
     }
   };
 
-  const handleAmountBlur = () => {
-    if (type === 'transfer' || !payeeName.trim()) return;
-    const currentPayee =
-      selectedPayeeObj ||
-      payees.find((p) => p.name.toLowerCase() === payeeName.trim().toLowerCase()) ||
-      null;
-    if (currentPayee) {
-      applyPayeeCategory(currentPayee, amountCents);
-    }
-  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,8 +243,6 @@ function TransactionEditForm({
             <CurrencyInput
               valueCents={amountCents}
               onChangeCents={setAmountCents}
-              onBlur={handleAmountBlur}
-              autoFocus
             />
           </div>
         </div>
@@ -329,6 +322,8 @@ function TransactionEditForm({
                       } else if (defaultCatId) {
                         setCategoryId(defaultCatId);
                         setCategorySuggestion({ categoryId: defaultCatId, source: 'default' });
+                      } else {
+                        setCategorySuggestion(null);
                       }
                     }}
                     placeholder={type === 'income' ? 'Search or add payer...' : 'Search or add payee...'}

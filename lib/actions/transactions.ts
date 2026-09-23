@@ -404,7 +404,7 @@ export async function updateTransaction(
     let payeeId = tx.payeeId;
     if (input.payeeName !== undefined) {
       if (input.payeeName.trim()) {
-        const payee = await getOrCreatePayee(input.payeeName.trim(), input.categoryId || undefined);
+        const payee = await getOrCreatePayee(input.payeeName.trim());
         payeeId = payee?.id || null;
       } else {
         payeeId = null;

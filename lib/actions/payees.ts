@@ -358,13 +358,6 @@ export async function getOrCreatePayee(name: string, defaultCategoryId?: string)
     .limit(1);
 
   if (existing.length > 0) {
-    // Optionally update default category if provided and payee didn't have one
-    if (defaultCategoryId && !existing[0].defaultCategoryId) {
-      db.update(payees)
-        .set({ defaultCategoryId })
-        .where(eq(payees.id, existing[0].id))
-        .run();
-    }
     return existing[0];
   }
 

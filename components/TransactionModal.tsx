@@ -52,11 +52,16 @@ export function TransactionModal({
   const [isPending, startTransition] = useTransition();
 
   const applyPayeeCategory = (targetPayee: PayeeWithRules | null, amount: number) => {
-    if (!targetPayee) return;
+    if (!targetPayee) {
+      setCategorySuggestion(null);
+      return;
+    }
     const match = resolvePayeeCategory(targetPayee, amount);
     if (match) {
       setCategoryId(match.categoryId);
       setCategorySuggestion(match);
+    } else {
+      setCategorySuggestion(null);
     }
   };
 
@@ -67,7 +72,11 @@ export function TransactionModal({
       payees.find((p) => p.name.toLowerCase() === payeeName.trim().toLowerCase()) ||
       null;
     if (currentPayee) {
-      applyPayeeCategory(currentPayee, amountCents);
+      const match = resolvePayeeCategory(currentPayee, amountCents);
+      if (match && match.source === 'rule') {
+        setCategoryId(match.categoryId);
+        setCategorySuggestion(match);
+      }
     }
   };
 
@@ -298,6 +307,8 @@ export function TransactionModal({
                         } else if (defaultCatId) {
                           setCategoryId(defaultCatId);
                           setCategorySuggestion({ categoryId: defaultCatId, source: 'default' });
+                        } else {
+                          setCategorySuggestion(null);
                         }
                       }}
                       placeholder={type === 'income' ? 'Search or add payer...' : 'Search or add payee...'}
