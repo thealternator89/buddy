@@ -1,13 +1,23 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import { X, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Sparkles, Check } from 'lucide-react';
+import {
+  X,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowLeftRight,
+  Sparkles,
+  Check,
+  CalendarClock,
+} from 'lucide-react';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { sortAccountsByGroupAndOrder } from '@/lib/account-utils';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { resolvePayeeCategory, formatRuleCondition, RuleMatchResult } from '@/lib/payee-rules';
 import { createTransaction } from '@/lib/actions/transactions';
+import { ScheduledTransactionWithDetails } from '@/lib/actions/scheduled-transactions';
+import { getLocalTodayIso, FREQUENCY_LABELS } from '@/lib/utils/scheduled';
 import { APP_CONFIG } from '@/lib/constants';
 
 import { CurrencyInput } from './CurrencyInput';
@@ -22,6 +32,7 @@ interface TransactionModalProps {
   categories: (CategoryNode | CategoryFlatItem)[];
   payees: PayeeWithRules[];
   defaultAccountId?: string;
+  prefillScheduled?: ScheduledTransactionWithDetails | null;
 }
 
 type TxType = 'expense' | 'income' | 'transfer';
@@ -33,20 +44,42 @@ export function TransactionModal({
   categories,
   payees,
   defaultAccountId,
+  prefillScheduled,
 }: TransactionModalProps) {
   const sortedAccounts = useMemo(() => sortAccountsByGroupAndOrder(accounts), [accounts]);
-  const [type, setType] = useState<TxType>('expense');
-  const [accountId, setAccountId] = useState(defaultAccountId || sortedAccounts[0]?.id || '');
-  const [destAccountId, setDestAccountId] = useState(
-    sortedAccounts.find((a) => a.id !== (defaultAccountId || sortedAccounts[0]?.id))?.id || ''
+  const [type, setType] = useState<TxType>(() => {
+    if (prefillScheduled) {
+      if (prefillScheduled.transferAccountId) return 'transfer';
+      return prefillScheduled.amountCents > 0 ? 'income' : 'expense';
+    }
+    return 'expense';
+  });
+  const [accountId, setAccountId] = useState(
+    prefillScheduled?.accountId || defaultAccountId || sortedAccounts[0]?.id || ''
   );
-  const [payeeName, setPayeeName] = useState('');
-  const [selectedPayeeObj, setSelectedPayeeObj] = useState<PayeeWithRules | null>(null);
-  const [categoryId, setCategoryId] = useState('');
+  const [destAccountId, setDestAccountId] = useState(
+    prefillScheduled?.transferAccountId ||
+      sortedAccounts.find(
+        (a) => a.id !== (prefillScheduled?.accountId || defaultAccountId || sortedAccounts[0]?.id)
+      )?.id ||
+      ''
+  );
+  const [payeeName, setPayeeName] = useState(prefillScheduled?.payeeName || '');
+  const [selectedPayeeObj, setSelectedPayeeObj] = useState<PayeeWithRules | null>(() => {
+    if (!prefillScheduled?.payeeName) return null;
+    return (
+      payees.find(
+        (p) => p.name.toLowerCase() === prefillScheduled.payeeName!.trim().toLowerCase()
+      ) || null
+    );
+  });
+  const [categoryId, setCategoryId] = useState(prefillScheduled?.categoryId || '');
   const [categorySuggestion, setCategorySuggestion] = useState<RuleMatchResult | null>(null);
-  const [amountCents, setAmountCents] = useState<number>(0);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState('');
+  const [amountCents, setAmountCents] = useState<number>(
+    prefillScheduled ? Math.abs(prefillScheduled.amountCents) : 0
+  );
+  const [date, setDate] = useState(() => getLocalTodayIso());
+  const [notes, setNotes] = useState(prefillScheduled?.notes || '');
   const [isCleared, setIsCleared] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -82,7 +115,6 @@ export function TransactionModal({
 
   if (!isOpen) return null;
 
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -112,6 +144,7 @@ export function TransactionModal({
             date,
             notes: notes.trim() || undefined,
             isCleared,
+            scheduledTransactionId: prefillScheduled?.id,
           });
           onClose();
         } catch (err: unknown) {
@@ -141,6 +174,7 @@ export function TransactionModal({
             date,
             notes: notes.trim() || undefined,
             isCleared,
+            scheduledTransactionId: prefillScheduled?.id,
           });
           onClose();
         } catch (err: unknown) {
@@ -160,7 +194,7 @@ export function TransactionModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800">
           <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-            Record Transaction
+            {prefillScheduled ? 'Configure & Create Scheduled Transaction' : 'Record Transaction'}
           </h2>
           <button
             onClick={onClose}
@@ -169,6 +203,16 @@ export function TransactionModal({
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {prefillScheduled && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-2.5 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <CalendarClock className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>
+              Scheduled for <strong>{prefillScheduled.nextDueDate}</strong> (
+              {FREQUENCY_LABELS[prefillScheduled.frequency]}). Saving will record this transaction and advance the schedule.
+            </span>
+          </div>
+        )}
 
         {/* Transaction Type Tabs */}
         <div className="grid grid-cols-3 gap-2 p-1 mt-4 rounded-xl bg-zinc-100 dark:bg-zinc-800">

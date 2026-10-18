@@ -40,6 +40,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   payees: many(payees),
   payeeRules: many(payeeRules),
   transactions: many(transactions),
+  scheduledTransactions: many(scheduledTransactions),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -263,6 +264,60 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+export const scheduledTransactions = pgTable(
+  'scheduled_transactions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    transferAccountId: text('transfer_account_id').references(() => accounts.id, {
+      onDelete: 'cascade',
+    }),
+    payeeId: text('payee_id').references(() => payees.id, { onDelete: 'set null' }),
+    categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    amountCents: integer('amount_cents').notNull(), // Negative = Outflow/Transfer, Positive = Inflow
+    frequency: text('frequency', {
+      enum: ['once', 'weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly'],
+    }).notNull(),
+    startDate: text('start_date').notNull(), // YYYY-MM-DD
+    nextDueDate: text('next_due_date').notNull(), // YYYY-MM-DD
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('scheduled_tx_user_id_due_date_idx').on(table.userId, table.nextDueDate),
+    index('scheduled_tx_user_id_account_id_idx').on(table.userId, table.accountId),
+  ]
+);
+
+export const scheduledTransactionsRelations = relations(scheduledTransactions, ({ one }) => ({
+  user: one(users, {
+    fields: [scheduledTransactions.userId],
+    references: [users.id],
+  }),
+  account: one(accounts, {
+    fields: [scheduledTransactions.accountId],
+    references: [accounts.id],
+  }),
+  transferAccount: one(accounts, {
+    fields: [scheduledTransactions.transferAccountId],
+    references: [accounts.id],
+  }),
+  payee: one(payees, {
+    fields: [scheduledTransactions.payeeId],
+    references: [payees.id],
+  }),
+  category: one(categories, {
+    fields: [scheduledTransactions.categoryId],
+    references: [categories.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -277,4 +332,6 @@ export type PayeeRule = typeof payeeRules.$inferSelect;
 export type NewPayeeRule = typeof payeeRules.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type ScheduledTransaction = typeof scheduledTransactions.$inferSelect;
+export type NewScheduledTransaction = typeof scheduledTransactions.$inferInsert;
 export type BalanceDisplayMode = 'actual' | 'available';

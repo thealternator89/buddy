@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   Wallet,
   ArrowLeftRight,
+  CalendarClock,
   SlidersHorizontal,
   LayoutDashboard,
   CreditCard,
@@ -47,6 +48,7 @@ export function Navbar({
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/accounts', label: 'Accounts', icon: CreditCard },
     { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+    { href: '/scheduled', label: 'Scheduled', icon: CalendarClock },
     { href: '/manage', label: 'Manage', icon: SlidersHorizontal },
   ];
 

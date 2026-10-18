@@ -1,11 +1,19 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { accounts, categories, payees, transactions, payeeRules } from '@/lib/db/schema';
+import {
+  accounts,
+  categories,
+  payees,
+  transactions,
+  payeeRules,
+  scheduledTransactions,
+} from '@/lib/db/schema';
 import { requireUser } from '@/lib/auth';
 import { getOrCreatePayee } from './payees';
 import { getCategorySubtreeIds } from './categories';
 import { resolvePayeeCategory, RuleOperator } from '@/lib/payee-rules';
+import { calculateNextDueDate, ScheduledFrequency } from '@/lib/utils/scheduled';
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { revalidatePath } from 'next/cache';
@@ -245,6 +253,7 @@ export type CreateTransactionInput =
       date: string;
       notes?: string;
       isCleared?: boolean;
+      scheduledTransactionId?: string;
     }
   | {
       isTransfer: true;
@@ -254,6 +263,7 @@ export type CreateTransactionInput =
       date: string;
       notes?: string;
       isCleared?: boolean;
+      scheduledTransactionId?: string;
     };
 
 export async function createTransaction(input: CreateTransactionInput) {
@@ -371,6 +381,53 @@ export async function createTransaction(input: CreateTransactionInput) {
       notes: input.notes || null,
       isCleared: input.isCleared ?? true,
     });
+  }
+
+  if (input.scheduledTransactionId) {
+    const existingScheduled = await db
+      .select()
+      .from(scheduledTransactions)
+      .where(
+        and(
+          eq(scheduledTransactions.id, input.scheduledTransactionId),
+          eq(scheduledTransactions.userId, user.id)
+        )
+      )
+      .limit(1);
+
+    if (existingScheduled.length > 0) {
+      const sched = existingScheduled[0];
+      const nextDate = calculateNextDueDate(
+        sched.nextDueDate,
+        sched.frequency as ScheduledFrequency,
+        sched.startDate
+      );
+
+      if (!nextDate) {
+        await db
+          .delete(scheduledTransactions)
+          .where(
+            and(
+              eq(scheduledTransactions.id, sched.id),
+              eq(scheduledTransactions.userId, user.id)
+            )
+          );
+      } else {
+        await db
+          .update(scheduledTransactions)
+          .set({
+            nextDueDate: nextDate,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(scheduledTransactions.id, sched.id),
+              eq(scheduledTransactions.userId, user.id)
+            )
+          );
+      }
+    }
+    safeRevalidatePath('/scheduled');
   }
 
   safeRevalidatePath('/');

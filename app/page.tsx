@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth';
 import { getAccountsWithBalances, AccountWithBalance } from '@/lib/actions/accounts';
 import { getAccountGroups } from '@/lib/actions/account-groups';
 import { getTransactions } from '@/lib/actions/transactions';
+import { getScheduledTransactions } from '@/lib/actions/scheduled-transactions';
 import { getFlatCategories } from '@/lib/actions/categories';
 import { getPayees } from '@/lib/actions/payees';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -10,6 +11,7 @@ import { APP_CONFIG } from '@/lib/constants';
 import { AccountIcon } from '@/components/AccountIcon';
 import { GroupIcon } from '@/components/GroupIcon';
 import { RecentTransactionsList } from '@/components/RecentTransactionsList';
+import { DueScheduledCarousel } from '@/components/DueScheduledCarousel';
 import {
   ArrowRight,
   Layers,
@@ -18,13 +20,15 @@ import {
 export default async function DashboardPage() {
   await requireUser();
 
-  const [accounts, recentTransactions, groups, categories, payees] = await Promise.all([
-    getAccountsWithBalances(),
-    getTransactions({ limit: 8 }),
-    getAccountGroups(),
-    getFlatCategories(),
-    getPayees(),
-  ]);
+  const [accounts, recentTransactions, scheduledTransactions, groups, categories, payees] =
+    await Promise.all([
+      getAccountsWithBalances(),
+      getTransactions({ limit: 8 }),
+      getScheduledTransactions(),
+      getAccountGroups(),
+      getFlatCategories(),
+      getPayees(),
+    ]);
 
   // Group accounts for overview display
   const knownGroupIds = new Set(groups.map((g) => g.id));
@@ -180,24 +184,33 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Recent Transactions Column */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Recent Transactions</h2>
-            <Link
-              href="/transactions"
-              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1"
-            >
-              View All <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-
-          <RecentTransactionsList
-            transactions={recentTransactions}
+        {/* Due Scheduled & Recent Transactions Column */}
+        <div className="lg:col-span-2 space-y-6">
+          <DueScheduledCarousel
+            scheduledTransactions={scheduledTransactions}
             accounts={accounts}
             categories={categories}
             payees={payees}
           />
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Recent Transactions</h2>
+              <Link
+                href="/transactions"
+                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1"
+              >
+                View All <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            <RecentTransactionsList
+              transactions={recentTransactions}
+              accounts={accounts}
+              categories={categories}
+              payees={payees}
+            />
+          </div>
         </div>
       </div>
     </div>
