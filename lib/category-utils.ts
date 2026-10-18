@@ -2,7 +2,6 @@ export interface CategoryNode {
   id: string;
   name: string;
   parentId: string | null;
-  sortOrder: number;
   isArchived: boolean;
   createdAt: Date;
 
@@ -23,7 +22,6 @@ export interface CategoryFlatItem {
   id: string;
   name: string;
   parentId: string | null;
-  sortOrder: number;
   depth: number;
   path: string[];
   fullPathName: string;
@@ -32,6 +30,23 @@ export interface CategoryFlatItem {
   totalSpentCents: number;
   directTransactionCount: number;
   totalTransactionCount: number;
+}
+
+/**
+ * Recursively sorts a CategoryNode tree alphabetically by name at every level.
+ */
+export function sortCategoryTree(nodes: CategoryNode[]): CategoryNode[] {
+  return [...nodes]
+    .sort(
+      (a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id)
+    )
+    .map((node) => ({
+      ...node,
+      children: node.children ? sortCategoryTree(node.children) : [],
+    }));
 }
 
 /**
@@ -60,9 +75,10 @@ export function processCategoryNode(
 }
 
 /**
- * Flattens a CategoryNode tree into a depth-first list.
+ * Flattens a CategoryNode tree into a depth-first list, ordered alphabetically.
  */
 export function flattenCategoryTree(nodes: CategoryNode[]): CategoryFlatItem[] {
+  const sorted = sortCategoryTree(nodes);
   const result: CategoryFlatItem[] = [];
 
   function traverse(node: CategoryNode) {
@@ -70,7 +86,6 @@ export function flattenCategoryTree(nodes: CategoryNode[]): CategoryFlatItem[] {
       id: node.id,
       name: node.name,
       parentId: node.parentId,
-      sortOrder: node.sortOrder,
       depth: node.depth,
       path: node.path,
       fullPathName: node.fullPathName,
@@ -86,7 +101,7 @@ export function flattenCategoryTree(nodes: CategoryNode[]): CategoryFlatItem[] {
     }
   }
 
-  for (const node of nodes) {
+  for (const node of sorted) {
     traverse(node);
   }
 

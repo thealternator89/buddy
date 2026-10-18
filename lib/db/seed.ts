@@ -47,23 +47,23 @@ export async function seed() {
 
   await db.insert(categories).values([
     // Root level categories
-    { id: catGroceriesId, userId, parentId: null, name: 'Groceries', sortOrder: 1 },
-    { id: catEatingOutId, userId, parentId: null, name: 'Eating out', sortOrder: 2 },
-    { id: catHousingId, userId, parentId: null, name: 'Housing & Living', sortOrder: 3 },
-    { id: catIncomeId, userId, parentId: null, name: 'Income', sortOrder: 4 },
+    { id: catGroceriesId, userId, parentId: null, name: 'Groceries' },
+    { id: catEatingOutId, userId, parentId: null, name: 'Eating out' },
+    { id: catHousingId, userId, parentId: null, name: 'Housing & Living' },
+    { id: catIncomeId, userId, parentId: null, name: 'Income' },
 
     // Groceries children (Level 2)
-    { id: catSupermarketId, userId, parentId: catGroceriesId, name: 'Supermarket', sortOrder: 1 },
-    { id: catConvenienceId, userId, parentId: catGroceriesId, name: 'Convenience', sortOrder: 2 },
+    { id: catSupermarketId, userId, parentId: catGroceriesId, name: 'Supermarket' },
+    { id: catConvenienceId, userId, parentId: catGroceriesId, name: 'Convenience' },
 
     // Eating out children (Level 2)
-    { id: catBarId, userId, parentId: catEatingOutId, name: 'Bar', sortOrder: 1 },
-    { id: catRestaurantId, userId, parentId: catEatingOutId, name: 'Restaurant', sortOrder: 2 },
-    { id: catCoffeeId, userId, parentId: catEatingOutId, name: 'Cafes & Coffee', sortOrder: 3 },
+    { id: catBarId, userId, parentId: catEatingOutId, name: 'Bar' },
+    { id: catRestaurantId, userId, parentId: catEatingOutId, name: 'Restaurant' },
+    { id: catCoffeeId, userId, parentId: catEatingOutId, name: 'Cafes & Coffee' },
 
     // Housing children (Level 2)
-    { id: catRentId, userId, parentId: catHousingId, name: 'Rent / Mortgage', sortOrder: 1 },
-    { id: catUtilitiesId, userId, parentId: catHousingId, name: 'Utilities', sortOrder: 2 },
+    { id: catRentId, userId, parentId: catHousingId, name: 'Rent / Mortgage' },
+    { id: catUtilitiesId, userId, parentId: catHousingId, name: 'Utilities' },
 
     // Utilities children (Level 3)
     {
@@ -71,24 +71,21 @@ export async function seed() {
       userId,
       parentId: catUtilitiesId,
       name: 'Power & Electricity',
-      sortOrder: 1,
     },
     {
       id: catInternetId,
       userId,
       parentId: catUtilitiesId,
       name: 'Internet & Mobile',
-      sortOrder: 2,
     },
 
     // Income children (Level 2)
-    { id: catSalaryId, userId, parentId: catIncomeId, name: 'Salary & Wages', sortOrder: 1 },
+    { id: catSalaryId, userId, parentId: catIncomeId, name: 'Salary & Wages' },
     {
       id: catInvestmentsId,
       userId,
       parentId: catIncomeId,
       name: 'Investments & Dividends',
-      sortOrder: 2,
     },
   ]);
 

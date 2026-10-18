@@ -11,12 +11,14 @@ import {
   CategoryFlatItem,
   processCategoryNode,
   flattenCategoryTree,
+  sortCategoryTree,
 } from '@/lib/category-utils';
 
 export type { CategoryNode, CategoryFlatItem };
 
 /**
- * Fetches the entire non-archived category tree with rollups and metrics for the current user.
+ * Fetches the entire non-archived category tree with rollups and metrics for the current user,
+ * ordered alphabetically at the root level and within all nested branches.
  */
 export async function getCategoryTree(): Promise<CategoryNode[]> {
   const user = await requireUser();
@@ -25,7 +27,7 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
     .select()
     .from(categories)
     .where(and(eq(categories.userId, user.id), eq(categories.isArchived, false)))
-    .orderBy(asc(categories.sortOrder), asc(categories.name));
+    .orderBy(asc(categories.name));
 
   // Compute spending per category (expenses are negative amountCents)
   const txStats = await db
@@ -56,7 +58,6 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
       id: c.id,
       name: c.name,
       parentId: c.parentId,
-      sortOrder: c.sortOrder,
       isArchived: c.isArchived,
       createdAt: c.createdAt,
       children: [],
@@ -81,12 +82,15 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
     }
   }
 
+  // Sort root nodes and all nested branches alphabetically
+  const sortedRoots = sortCategoryTree(rootNodes);
+
   // Compute rollups and breadcrumbs
-  for (const root of rootNodes) {
+  for (const root of sortedRoots) {
     processCategoryNode(root, [], 0);
   }
 
-  return rootNodes;
+  return sortedRoots;
 }
 
 /**
@@ -165,25 +169,13 @@ export async function createCategory(name: string, parentId?: string | null) {
     }
   }
 
-  const existingSiblings = await db
-    .select({ id: categories.id })
-    .from(categories)
-    .where(
-      and(
-        eq(categories.userId, user.id),
-        pid ? eq(categories.parentId, pid) : sql`${categories.parentId} IS NULL`
-      )
-    );
-
   const id = crypto.randomUUID();
-  const nextOrder = existingSiblings.length + 1;
 
   await db.insert(categories).values({
     id,
     userId: user.id,
     name: trimmed,
     parentId: pid,
-    sortOrder: nextOrder,
     isArchived: false,
   });
 

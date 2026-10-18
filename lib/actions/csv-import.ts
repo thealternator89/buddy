@@ -79,7 +79,6 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
       id: categories.id,
       name: categories.name,
       parentId: categories.parentId,
-      sortOrder: categories.sortOrder,
     })
     .from(categories)
     .where(eq(categories.userId, user.id));
@@ -116,12 +115,8 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
   }
 
   const categoryMap = new Map<string, { id: string; name: string }>();
-  let maxCategoryOrder = 0;
   for (const cat of existingCategories) {
     categoryMap.set(cat.name.toLowerCase(), { id: cat.id, name: cat.name });
-    if (!cat.parentId && cat.sortOrder > maxCategoryOrder) {
-      maxCategoryOrder = cat.sortOrder;
-    }
   }
 
   const payeeMap = new Map<
@@ -229,14 +224,12 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
       if (existing) return existing.id;
 
       const id = crypto.randomUUID();
-      maxCategoryOrder += 1;
 
       await tx.insert(categories).values({
         id,
         userId: user.id,
         name: trimmed,
         parentId: null,
-        sortOrder: maxCategoryOrder,
         isArchived: false,
       });
 

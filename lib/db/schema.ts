@@ -123,7 +123,6 @@ export const categories = pgTable(
       onDelete: 'cascade',
     }),
     name: text('name').notNull(),
-    sortOrder: integer('sort_order').notNull().default(0),
     isArchived: boolean('is_archived').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

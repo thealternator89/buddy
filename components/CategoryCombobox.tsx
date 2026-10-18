@@ -101,7 +101,6 @@ export function CategoryCombobox({
             id: res.id,
             name: catName,
             parentId,
-            sortOrder: 999,
             depth: newDepth,
             path: newPath,
             fullPathName: newPath.join(' > '),

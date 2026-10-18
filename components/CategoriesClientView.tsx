@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { archiveCategory } from '@/lib/actions/categories';
-import { CategoryNode, flattenCategoryTree } from '@/lib/category-utils';
+import { CategoryNode, flattenCategoryTree, sortCategoryTree } from '@/lib/category-utils';
 import { CategoryModal, EditCategoryData } from './CategoryModal';
 import {
   PlusCircle,
@@ -34,7 +34,8 @@ export function CategoriesClientView({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  const flatCategories = flattenCategoryTree(categoryTree);
+  const sortedTree = useMemo(() => sortCategoryTree(categoryTree), [categoryTree]);
+  const flatCategories = useMemo(() => flattenCategoryTree(sortedTree), [sortedTree]);
 
   const toggleCollapse = (id: string) => {
     setCollapsedIds((prev) => {
@@ -251,7 +252,7 @@ export function CategoriesClientView({
             <span className="text-zinc-300 dark:text-zinc-700">•</span>
             <button
               type="button"
-              onClick={() => setCollapsedIds(new Set(categoryTree.map((r) => r.id)))}
+              onClick={() => setCollapsedIds(new Set(sortedTree.map((r) => r.id)))}
               className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
             >
               Collapse Roots
@@ -260,13 +261,13 @@ export function CategoriesClientView({
         </div>
 
         {/* Tree Content */}
-        {categoryTree.length === 0 ? (
+        {sortedTree.length === 0 ? (
           <div className="py-12 text-center text-zinc-400">
             No categories defined yet. Click &quot;New Root Category&quot; to get started.
           </div>
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {categoryTree.map((root) => renderNode(root))}
+            {sortedTree.map((root) => renderNode(root))}
           </div>
         )}
       </div>
