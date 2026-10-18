@@ -291,7 +291,7 @@ buddy/
 ├── app/                                 # Next.js 16 App Router
 │   ├── favicon.ico                      # Application favicon
 │   ├── globals.css                      # Tailwind CSS v4 directives & theme variables
-│   ├── layout.tsx                       # Root layout (renders Navbar, loads active entities)
+│   ├── layout.tsx                       # Root layout (renders Navbar & global layout shell)
 │   ├── page.tsx                         # Dashboard / Overview page (balances & recent activity)
 │   ├── accounts/
 │   │   └── page.tsx                     # Account management page (server loader)
@@ -307,6 +307,7 @@ buddy/
 │   ├── AccountIcon.tsx                  # Dynamic icon renderer for account types & custom icons
 │   ├── AccountModal.tsx                 # Modal for creating/editing accounts
 │   ├── AccountsClientView.tsx           # Accounts view with HTML5 drag-and-drop reordering
+│   ├── AddTransactionButton.tsx         # Action button on Overview header to trigger TransactionModal
 │   ├── CategoriesClientView.tsx         # Collapsible category tree with rollup indicators
 │   ├── CategoryCombobox.tsx             # Searchable hierarchical category selector dropdown
 │   ├── CategoryModal.tsx                # Modal for creating/editing categories and parent assignment
@@ -318,7 +319,7 @@ buddy/
 │   ├── GroupIcon.tsx                    # Dynamic icon renderer for account groups
 │   ├── IconPicker.tsx                   # Visual grid picker for Lucide icon selection
 │   ├── ManageClientView.tsx             # Tabbed coordinator for Categories and Payees tabs
-│   ├── Navbar.tsx                       # Sticky navigation header with mobile drawer & quick-action
+│   ├── Navbar.tsx                       # Sticky navigation header with mobile drawer & user controls
 │   ├── PayeeCombobox.tsx                # Combobox with priority badges and quick-picks
 │   ├── PayeeModal.tsx                   # Modal for editing payee rules, priority, and default category
 │   ├── PayeesTab.tsx                    # Payee directory with search, filters, and rule count badges

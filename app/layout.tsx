@@ -2,9 +2,6 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/Navbar';
-import { getAccountsWithBalances } from '@/lib/actions/accounts';
-import { getCategoryTree } from '@/lib/actions/categories';
-import { getPayees } from '@/lib/actions/payees';
 import { getCurrentUser } from '@/lib/auth';
 
 const geistSans = Geist({
@@ -29,28 +26,13 @@ export default async function RootLayout({
 }) {
   const user = await getCurrentUser();
 
-  const [accounts, categoryTree, payees] = user
-    ? await Promise.all([
-        getAccountsWithBalances(),
-        getCategoryTree(),
-        getPayees(),
-      ])
-    : [[], [], []];
-
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-        {user && (
-          <Navbar
-            user={user}
-            accounts={accounts}
-            categories={categoryTree}
-            payees={payees}
-          />
-        )}
+        {user && <Navbar user={user} />}
         <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>

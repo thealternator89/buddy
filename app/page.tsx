@@ -12,6 +12,7 @@ import { AccountIcon } from '@/components/AccountIcon';
 import { GroupIcon } from '@/components/GroupIcon';
 import { RecentTransactionsList } from '@/components/RecentTransactionsList';
 import { DueScheduledCarousel } from '@/components/DueScheduledCarousel';
+import { AddTransactionButton } from '@/components/AddTransactionButton';
 import {
   ArrowRight,
   Layers,
@@ -118,6 +119,14 @@ export default async function DashboardPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             Tracking in <span className="font-semibold text-zinc-700 dark:text-zinc-300">{APP_CONFIG.currency.code} ({APP_CONFIG.currency.symbol})</span>
           </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <AddTransactionButton
+            accounts={accounts}
+            categories={categories}
+            payees={payees}
+          />
         </div>
       </div>
 
