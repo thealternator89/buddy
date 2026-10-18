@@ -1,10 +1,16 @@
 import { defineConfig } from 'drizzle-kit';
 
+try {
+  process.loadEnvFile?.('.env');
+} catch {
+  // Ignore if .env is not present
+}
+
 export default defineConfig({
   schema: './lib/db/schema.ts',
   out: './lib/db/migrations',
-  dialect: 'sqlite',
+  dialect: 'postgresql',
   dbCredentials: {
-    url: './data/buddy.db',
+    url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/buddy',
   },
 });

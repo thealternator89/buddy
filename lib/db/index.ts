@@ -1,132 +1,29 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import fs from 'fs';
-import path from 'path';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
 
-const DB_PATH = process.env.DATABASE_URL || path.join(process.cwd(), 'data', 'buddy.db');
-
-// Ensure the directory exists
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+try {
+  process.loadEnvFile?.('.env');
+} catch {
+  // Ignore if .env is not present (e.g. injected via environment in production)
 }
+
+const connectionString =
+  process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/buddy';
 
 declare global {
-  var __sqliteDb: Database.Database | undefined;
+  var __pgClient: ReturnType<typeof postgres> | undefined;
 }
 
-const sqlite =
-  globalThis.__sqliteDb ??
-  (() => {
-    const client = new Database(DB_PATH);
-    client.pragma('journal_mode = WAL');
-    client.pragma('foreign_keys = ON');
-
-    try {
-      // 1. Accounts column migrations
-      const columns = client.pragma('table_info(accounts)') as Array<{ name: string }>;
-      const columnNames = new Set(columns.map((c) => c.name));
-      if (columnNames.size > 0) {
-        const safeAddCol = (col: string, sql: string) => {
-          if (!columnNames.has(col)) {
-            try {
-              client.exec(sql);
-            } catch (err: unknown) {
-              if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
-                throw err;
-              }
-            }
-          }
-        };
-
-        safeAddCol('icon', 'ALTER TABLE accounts ADD COLUMN icon TEXT');
-        safeAddCol('exclude_from_net_worth', 'ALTER TABLE accounts ADD COLUMN exclude_from_net_worth INTEGER NOT NULL DEFAULT 0');
-        safeAddCol('credit_limit_cents', 'ALTER TABLE accounts ADD COLUMN credit_limit_cents INTEGER');
-        safeAddCol('balance_display_mode', "ALTER TABLE accounts ADD COLUMN balance_display_mode TEXT NOT NULL DEFAULT 'actual'");
-      }
-
-      // 2. Categories hierarchy migration (from category_groups to parent_id)
-      const catSql = client
-        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='categories'")
-        .pluck()
-        .get() as string | undefined;
-
-      if (catSql && (catSql.includes('group_id') || !catSql.includes('parent_id'))) {
-        client.pragma('foreign_keys = OFF');
-        client.exec(`
-          CREATE TABLE IF NOT EXISTS \`categories_new\` (
-            \`id\` text PRIMARY KEY NOT NULL,
-            \`parent_id\` text,
-            \`name\` text NOT NULL,
-            \`sort_order\` integer DEFAULT 0 NOT NULL,
-            \`is_archived\` integer DEFAULT 0 NOT NULL,
-            \`created_at\` integer NOT NULL,
-            FOREIGN KEY (\`parent_id\`) REFERENCES \`categories\`(\`id\`) ON UPDATE no action ON DELETE cascade
-          );
-        `);
-
-        // Check if category_groups exists to migrate them as root categories
-        const hasGroups = client
-          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='category_groups'")
-          .all().length > 0;
-
-        if (hasGroups) {
-          client.exec(`
-            INSERT OR IGNORE INTO \`categories_new\` (\`id\`, \`parent_id\`, \`name\`, \`sort_order\`, \`is_archived\`, \`created_at\`)
-            SELECT \`id\`, NULL, \`name\` , \`sort_order\`, 0, \`created_at\` FROM \`category_groups\`;
-          `);
-        }
-
-        // Migrate existing categories
-        const catCols = client.pragma('table_info(categories)') as Array<{ name: string }>;
-        const catColNames = new Set(catCols.map((c) => c.name));
-        const parentExpr = catColNames.has('group_id')
-          ? 'coalesce(parent_id, group_id)'
-          : 'parent_id';
-
-        client.exec(`
-          INSERT OR REPLACE INTO \`categories_new\` (\`id\`, \`parent_id\`, \`name\`, \`sort_order\`, \`is_archived\`, \`created_at\`)
-          SELECT \`id\`, ${parentExpr}, \`name\`, \`sort_order\`, \`is_archived\`, \`created_at\` FROM \`categories\`;
-          DROP TABLE \`categories\`;
-          ALTER TABLE \`categories_new\` RENAME TO \`categories\`;
-          DROP TABLE IF EXISTS \`category_groups\`;
-        `);
-        client.pragma('foreign_keys = ON');
-      }
-
-      // 3. Payee rules table auto-migration
-      client.exec(`
-        CREATE TABLE IF NOT EXISTS \`payee_rules\` (
-          \`id\` text PRIMARY KEY NOT NULL,
-          \`payee_id\` text NOT NULL,
-          \`category_id\` text NOT NULL,
-          \`operator\` text NOT NULL,
-          \`amount_cents\` integer NOT NULL,
-          \`sort_order\` integer DEFAULT 0 NOT NULL,
-          \`created_at\` integer NOT NULL,
-          FOREIGN KEY (\`payee_id\`) REFERENCES \`payees\`(\`id\`) ON UPDATE no action ON DELETE cascade,
-          FOREIGN KEY (\`category_id\`) REFERENCES \`categories\`(\`id\`) ON UPDATE no action ON DELETE cascade
-        );
-        CREATE INDEX IF NOT EXISTS \`idx_payee_rules_payee_id\` ON \`payee_rules\`(\`payee_id\`);
-      `);
-
-      // 4. Payees priority column auto-migration
-      const payeeCols = client.pragma('table_info(payees)') as Array<{ name: string }>;
-      const payeeColNames = new Set(payeeCols.map((c) => c.name));
-      if (payeeColNames.size > 0 && !payeeColNames.has('priority')) {
-        client.exec('ALTER TABLE payees ADD COLUMN priority INTEGER NOT NULL DEFAULT 1');
-      }
-    } catch (e) {
-      console.error('Database auto-migration note:', e);
-    }
-
-    return client;
-  })();
+const pgClient =
+  globalThis.__pgClient ??
+  postgres(connectionString, {
+    max: process.env.NODE_ENV === 'production' ? 10 : 5,
+  });
 
 if (process.env.NODE_ENV !== 'production') {
-  globalThis.__sqliteDb = sqlite;
+  globalThis.__pgClient = pgClient;
 }
 
-export const db = drizzle(sqlite, { schema });
-export { sqlite };
+export const db = drizzle(pgClient, { schema });
+export { pgClient };

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requireUser } from '@/lib/auth';
 import { getAccountsWithBalances, AccountWithBalance } from '@/lib/actions/accounts';
 import { getAccountGroups } from '@/lib/actions/account-groups';
 import { getTransactions } from '@/lib/actions/transactions';
@@ -15,6 +16,8 @@ import {
 } from 'lucide-react';
 
 export default async function DashboardPage() {
+  await requireUser();
+
   const [accounts, recentTransactions, groups, categories, payees] = await Promise.all([
     getAccountsWithBalances(),
     getTransactions({ limit: 8 }),

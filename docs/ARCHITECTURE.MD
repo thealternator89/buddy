@@ -8,9 +8,9 @@ This document provides a deep technical overview of **Buddy**, explaining the sy
 
 Buddy is engineered with three primary design principles:
 
-1. **Local-First & Data Sovereignty**: All user financial records are persisted locally in an embedded SQLite database (`./data/buddy.db`). There are no third-party cloud sync services, tracking scripts, or external dependencies required to operate.
+1. **Multi-User Isolation & Self-Contained Auth**: All user financial records are stored in PostgreSQL and strictly isolated per user (`user_id` foreign keys across all domain tables). Authentication uses self-contained Email & Password credentials (`crypto.scrypt`) and database-backed sessions (`sessions` table) with no external third-party auth service dependencies.
 2. **Server-First Execution with React Server Components (RSC)**: Buddy leverages Next.js 16's App Router architecture. High-cost database queries, category hierarchy rollups, and aggregations are computed on the server and streamed as server components, minimizing client-side JavaScript overhead.
-3. **Type-Safe Domain Logic & Server Actions**: All data mutations (CRUD operations, reordering, CSV ingestion) are implemented as Next.js Server Actions (`'use server'`) with full end-to-end TypeScript validation through Drizzle ORM.
+3. **Type-Safe Domain Logic & Server Actions**: All data mutations (CRUD operations, reordering, CSV ingestion) are implemented as Next.js Server Actions (`'use server'`) with full end-to-end TypeScript validation through Drizzle ORM and server-side `requireUser()` session enforcement.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -22,13 +22,15 @@ Buddy is engineered with three primary design principles:
                                │ HTTP / Server Action RPC
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    Next.js App Router (RSC)                 │
+│  - Next.js 16 Proxy Route Protection (proxy.ts)             │
 │  - Server-Rendered Layouts & View Aggregations               │
-│  - Server Actions (lib/actions/*)                            │
+│  - Authenticated Server Actions (lib/actions/*)             │
 │  - Path Revalidation (revalidatePath)                       │
 └──────────────────────────────▲──────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    Domain Services & Logic                  │
+│  - Authentication & Session Engine (lib/auth.ts)            │
 │  - Category Tree Rollup Engine (lib/category-utils.ts)      │
 │  - Payee Rule Evaluation Engine (lib/payee-rules.ts)        │
 │  - CSV Normalization & Parser (lib/csv.ts)                  │
@@ -36,44 +38,47 @@ Buddy is engineered with three primary design principles:
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
 │                   Drizzle ORM & Schema                      │
-│  - Relational Mapping & Schema Definitions                  │
+│  - Relational Mapping & Schema Definitions (pg-core)        │
 │  - Type Inference ($inferSelect, $inferInsert)              │
 └──────────────────────────────▲──────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
-│                SQLite Engine (better-sqlite3)               │
-│  - Write-Ahead Logging (WAL mode)                           │
-│  - Foreign Key Constraints Enabled                          │
-│  - In-App Schema Auto-Migrator (lib/db/index.ts)            │
-│  - Local Storage: ./data/buddy.db                           │
+│                  PostgreSQL Engine (postgres)               │
+│  - Connection Pooling via postgres.js (lib/db/index.ts)     │
+│  - Per-User Foreign Key & Cascade Constraints               │
+│  - Configured via DATABASE_URL                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Database Layer & Schema Design
+## 2. Database Layer, Authentication & Schema Design
 
-Buddy uses [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) as the storage engine paired with [Drizzle ORM](https://orm.drizzle.team/).
+Buddy uses PostgreSQL via [`postgres`](https://github.com/porsager/postgres) (`postgres.js`) paired with [Drizzle ORM](https://orm.drizzle.team/).
 
-### Database Initialization & Pragmas
+### Database Connection & Pooling
 
 On initialization (`lib/db/index.ts`):
-- **WAL Mode (`PRAGMA journal_mode = WAL;`)**: Dramatically improves concurrent read/write performance. Readers do not block writers, and writers do not block readers.
-- **Foreign Keys (`PRAGMA foreign_keys = ON;`)**: Enforces referential integrity at the database engine level.
-- **Singleton Client**: In development, `globalThis.__sqliteDb` preserves the SQLite handle across Next.js Hot Module Replacement (HMR) reloads to avoid file lock contention.
+- Connects using `process.env.DATABASE_URL`.
+- **Singleton Client**: In development, `globalThis.__pgClient` preserves the PostgreSQL connection pool across Next.js Hot Module Replacement (HMR) reloads.
 
-### In-App Auto-Migrations
+### Authentication & Tenant Isolation
 
-Rather than requiring manual database migrations during development, `lib/db/index.ts` inspects SQLite table schemas on connection and performs non-destructive schema migrations:
-- Adds missing columns (e.g., `icon` and `exclude_from_net_worth` to `accounts`).
-- Upgrades flat categories into a recursive self-referencing hierarchy (`parent_id`) while preserving existing categories and migrating legacy category groups.
-- Provisions `payee_rules` and index tables.
-- Adds `priority` metadata to `payees`.
+- **Password Security**: Passwords are hashed using Node's `crypto.scrypt` with a 16-byte random salt and verified with `crypto.timingSafeEqual`.
+- **Database Sessions**: Signing in generates a 32-byte random token, stores its SHA-256 digest in the `sessions` table, and sets an `httpOnly` cookie (`buddy_session`).
+- **Tenant Isolation**: Every domain table (`account_groups`, `accounts`, `categories`, `payees`, `payee_rules`, `transactions`) carries a non-null `user_id` referencing `users.id` (`ON DELETE CASCADE`). Every Server Action calls `requireUser()` and scopes all queries and mutations by `userId`.
 
 ### Entity Relationship Model
 
 ```mermaid
 erDiagram
+    USERS ||--o{ SESSIONS : "authenticates"
+    USERS ||--o{ ACCOUNT_GROUPS : "owns"
+    USERS ||--o{ ACCOUNTS : "owns"
+    USERS ||--o{ CATEGORIES : "owns"
+    USERS ||--o{ PAYEES : "owns"
+    USERS ||--o{ PAYEE_RULES : "owns"
+    USERS ||--o{ TRANSACTIONS : "owns"
     ACCOUNT_GROUPS ||--o{ ACCOUNTS : "contains"
     ACCOUNTS ||--o{ TRANSACTIONS : "holds"
     CATEGORIES ||--o{ CATEGORIES : "parent of (tree)"
@@ -87,61 +92,79 @@ erDiagram
 
 #### Tables
 
-1. **`account_groups`**: High-level groupings for accounts (e.g., *Everyday Banking*, *Investments*).
+1. **`users`**: Registered user accounts.
    - `id` (text, PK)
+   - `email` (text, unique, not null)
+   - `name` (text, not null)
+   - `password_hash` (text, not null)
+   - `created_at`, `updated_at` (timestamptz)
+
+2. **`sessions`**: Active login sessions.
+   - `id` (text, PK, SHA-256 hash of session token)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
+   - `expires_at`, `created_at` (timestamptz)
+
+3. **`account_groups`**: High-level groupings for accounts (e.g., *Everyday Banking*, *Investments*).
+   - `id` (text, PK)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `name` (text, not null)
    - `icon` (text, optional Lucide icon key)
    - `sort_order` (integer, default 0)
-   - `created_at`, `updated_at` (timestamps)
+   - `created_at`, `updated_at` (timestamptz)
 
-2. **`accounts`**: Individual financial accounts.
+4. **`accounts`**: Individual financial accounts.
    - `id` (text, PK)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `group_id` (text, FK -> `account_groups.id` on delete `SET NULL`)
    - `name` (text, not null)
    - `type` (text enum: `checking`, `savings`, `credit`, `cash`, `other`)
    - `icon` (text, optional Lucide icon key)
    - `sort_order` (integer, default 0)
-   - `exclude_from_net_worth` (boolean integer, default 0)
+   - `exclude_from_net_worth` (boolean, default false)
    - `credit_limit_cents` (integer, optional)
    - `balance_display_mode` (text enum: `actual`, `available`, default `actual`)
-   - `is_archived` (boolean integer, default 0)
-   - `created_at`, `updated_at` (timestamps)
+   - `is_archived` (boolean, default false)
+   - `created_at`, `updated_at` (timestamptz)
 
-3. **`categories`**: Recursive self-referencing spending taxonomy.
+5. **`categories`**: Recursive self-referencing spending taxonomy.
    - `id` (text, PK)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `parent_id` (text, FK -> `categories.id` on delete `CASCADE`)
    - `name` (text, not null)
    - `sort_order` (integer, default 0)
-   - `is_archived` (boolean integer, default 0)
-   - `created_at` (timestamp)
+   - `is_archived` (boolean, default false)
+   - `created_at` (timestamptz)
 
-4. **`payees`**: Transaction counter-parties with default category mappings and priorities.
+6. **`payees`**: Transaction counter-parties with default category mappings and priorities.
    - `id` (text, PK)
-   - `name` (text, unique, not null)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
+   - `name` (text, not null; unique per `user_id`)
    - `default_category_id` (text, FK -> `categories.id` on delete `SET NULL`)
    - `priority` (integer, default 1; 0=Highest, 1=Standard, 2=Low, 3=Archived)
-   - `created_at` (timestamp)
+   - `created_at` (timestamptz)
 
-5. **`payee_rules`**: Conditional amount-based categorization rules per payee.
+7. **`payee_rules`**: Conditional amount-based categorization rules per payee.
    - `id` (text, PK)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `payee_id` (text, FK -> `payees.id` on delete `CASCADE`)
    - `category_id` (text, FK -> `categories.id` on delete `CASCADE`)
    - `operator` (text enum: `lte`, `gte`)
    - `amount_cents` (integer, not null)
    - `sort_order` (integer, default 0)
-   - `created_at` (timestamp)
+   - `created_at` (timestamptz)
 
-6. **`transactions`**: Double-entry financial records and transfers.
+8. **`transactions`**: Double-entry financial records and transfers.
    - `id` (text, PK)
+   - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `account_id` (text, FK -> `accounts.id` on delete `CASCADE`)
    - `payee_id` (text, FK -> `payees.id` on delete `SET NULL`)
    - `category_id` (text, FK -> `categories.id` on delete `SET NULL`)
    - `amount_cents` (integer, signed; negative = outflow, positive = inflow)
    - `date` (text, `YYYY-MM-DD`)
    - `notes` (text, optional)
-   - `is_cleared` (boolean integer, default 1)
+   - `is_cleared` (boolean, default true)
    - `transfer_id` (text, self-reference linking paired transfer record)
-   - `created_at`, `updated_at` (timestamps)
+   - `created_at`, `updated_at` (timestamptz)
 
 ---
 

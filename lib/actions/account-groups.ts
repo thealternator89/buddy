@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db';
 import { accountGroups, accounts, transactions } from '@/lib/db/schema';
+import { requireUser } from '@/lib/auth';
 import { eq, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
@@ -24,9 +25,12 @@ function safeRevalidatePath(path: string) {
 }
 
 export async function getAccountGroups(): Promise<AccountGroupWithStats[]> {
+  const user = await requireUser();
+
   const groups = await db
     .select()
     .from(accountGroups)
+    .where(eq(accountGroups.userId, user.id))
     .orderBy(asc(accountGroups.sortOrder), asc(accountGroups.createdAt), asc(accountGroups.name));
 
   const activeAccounts = await db
@@ -35,7 +39,7 @@ export async function getAccountGroups(): Promise<AccountGroupWithStats[]> {
       groupId: accounts.groupId,
     })
     .from(accounts)
-    .where(eq(accounts.isArchived, false));
+    .where(and(eq(accounts.userId, user.id), eq(accounts.isArchived, false)));
 
   const balances = await db
     .select({
@@ -43,6 +47,7 @@ export async function getAccountGroups(): Promise<AccountGroupWithStats[]> {
       totalCents: sql<number>`coalesce(sum(${transactions.amountCents}), 0)`,
     })
     .from(transactions)
+    .where(eq(transactions.userId, user.id))
     .groupBy(transactions.accountId);
 
   const accountBalanceMap = new Map<string, number>();
@@ -79,37 +84,37 @@ export async function createAccountGroup(data: {
   sortOrder?: number;
   accountIds?: string[];
 }) {
+  const user = await requireUser();
   const groupId = crypto.randomUUID();
   const trimmed = data.name.trim();
   if (!trimmed) {
     throw new Error('Group name cannot be empty');
   }
 
-  db.transaction((tx) => {
+  await db.transaction(async (tx) => {
     let sortOrder = data.sortOrder;
     if (sortOrder === undefined) {
-      const maxOrderResult = tx
+      const maxOrderResult = await tx
         .select({ maxOrder: sql<number>`coalesce(max(${accountGroups.sortOrder}), 0)` })
         .from(accountGroups)
-        .get();
-      sortOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+        .where(eq(accountGroups.userId, user.id));
+      sortOrder = Number(maxOrderResult[0]?.maxOrder ?? 0) + 1;
     }
 
-    tx.insert(accountGroups)
-      .values({
-        id: groupId,
-        name: trimmed,
-        icon: data.icon || null,
-        sortOrder,
-      })
-      .run();
+    await tx.insert(accountGroups).values({
+      id: groupId,
+      userId: user.id,
+      name: trimmed,
+      icon: data.icon || null,
+      sortOrder,
+    });
 
     if (data.accountIds && data.accountIds.length > 0) {
       for (let i = 0; i < data.accountIds.length; i++) {
-        tx.update(accounts)
+        await tx
+          .update(accounts)
           .set({ groupId, sortOrder: i + 1, updatedAt: new Date() })
-          .where(eq(accounts.id, data.accountIds[i]))
-          .run();
+          .where(and(eq(accounts.id, data.accountIds[i]), eq(accounts.userId, user.id)));
       }
     }
   });
@@ -130,7 +135,9 @@ export async function updateAccountGroup(
     accountIds?: string[];
   }
 ) {
-  db.transaction((tx) => {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
     const updatePayload: Partial<typeof accountGroups.$inferInsert> = {
       updatedAt: new Date(),
     };
@@ -142,32 +149,39 @@ export async function updateAccountGroup(
     if (data.icon !== undefined) updatePayload.icon = data.icon;
     if (data.sortOrder !== undefined) updatePayload.sortOrder = data.sortOrder;
 
-    tx.update(accountGroups).set(updatePayload).where(eq(accountGroups.id, id)).run();
+    await tx
+      .update(accountGroups)
+      .set(updatePayload)
+      .where(and(eq(accountGroups.id, id), eq(accountGroups.userId, user.id)));
 
     if (data.accountIds !== undefined) {
-      // Find accounts currently assigned to this group
-      const currentAccounts = tx
+      // Find accounts currently assigned to this group for this user
+      const currentAccounts = await tx
         .select({ id: accounts.id })
         .from(accounts)
-        .where(eq(accounts.groupId, id))
-        .all();
+        .where(and(eq(accounts.groupId, id), eq(accounts.userId, user.id)));
 
       const toRemove = currentAccounts
         .filter((a) => !data.accountIds!.includes(a.id))
         .map((a) => a.id);
 
       if (toRemove.length > 0) {
-        const maxUngroupedOrder = tx
+        const maxUngroupedOrder = await tx
           .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
           .from(accounts)
-          .where(and(isNull(accounts.groupId), eq(accounts.isArchived, false)))
-          .get();
-        let nextUngroupedOrder = (maxUngroupedOrder?.maxOrder ?? 0) + 1;
+          .where(
+            and(
+              eq(accounts.userId, user.id),
+              isNull(accounts.groupId),
+              eq(accounts.isArchived, false)
+            )
+          );
+        let nextUngroupedOrder = Number(maxUngroupedOrder[0]?.maxOrder ?? 0) + 1;
         for (const remId of toRemove) {
-          tx.update(accounts)
+          await tx
+            .update(accounts)
             .set({ groupId: null, sortOrder: nextUngroupedOrder++, updatedAt: new Date() })
-            .where(eq(accounts.id, remId))
-            .run();
+            .where(and(eq(accounts.id, remId), eq(accounts.userId, user.id)));
         }
       }
 
@@ -175,17 +189,22 @@ export async function updateAccountGroup(
       const newlyAdded = data.accountIds.filter((accId) => !currentIdsSet.has(accId));
 
       if (newlyAdded.length > 0) {
-        const maxOrderResult = tx
+        const maxOrderResult = await tx
           .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
           .from(accounts)
-          .where(and(eq(accounts.groupId, id), eq(accounts.isArchived, false)))
-          .get();
-        let nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+          .where(
+            and(
+              eq(accounts.userId, user.id),
+              eq(accounts.groupId, id),
+              eq(accounts.isArchived, false)
+            )
+          );
+        let nextOrder = Number(maxOrderResult[0]?.maxOrder ?? 0) + 1;
         for (const accId of newlyAdded) {
-          tx.update(accounts)
+          await tx
+            .update(accounts)
             .set({ groupId: id, sortOrder: nextOrder++, updatedAt: new Date() })
-            .where(eq(accounts.id, accId))
-            .run();
+            .where(and(eq(accounts.id, accId), eq(accounts.userId, user.id)));
         }
       }
     }
@@ -199,31 +218,39 @@ export async function updateAccountGroup(
 }
 
 export async function deleteAccountGroup(id: string) {
-  db.transaction((tx) => {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
     // Unlink any accounts currently assigned to this group and append to ungrouped
-    const toUnlink = tx
+    const toUnlink = await tx
       .select({ id: accounts.id })
       .from(accounts)
-      .where(eq(accounts.groupId, id))
-      .all();
+      .where(and(eq(accounts.groupId, id), eq(accounts.userId, user.id)));
 
     if (toUnlink.length > 0) {
-      const maxUngroupedOrder = tx
+      const maxUngroupedOrder = await tx
         .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
         .from(accounts)
-        .where(and(isNull(accounts.groupId), eq(accounts.isArchived, false)))
-        .get();
-      let nextUngroupedOrder = (maxUngroupedOrder?.maxOrder ?? 0) + 1;
+        .where(
+          and(
+            eq(accounts.userId, user.id),
+            isNull(accounts.groupId),
+            eq(accounts.isArchived, false)
+          )
+        );
+      let nextUngroupedOrder = Number(maxUngroupedOrder[0]?.maxOrder ?? 0) + 1;
       for (const acc of toUnlink) {
-        tx.update(accounts)
+        await tx
+          .update(accounts)
           .set({ groupId: null, sortOrder: nextUngroupedOrder++, updatedAt: new Date() })
-          .where(eq(accounts.id, acc.id))
-          .run();
+          .where(and(eq(accounts.id, acc.id), eq(accounts.userId, user.id)));
       }
     }
 
     // Delete the group record
-    tx.delete(accountGroups).where(eq(accountGroups.id, id)).run();
+    await tx
+      .delete(accountGroups)
+      .where(and(eq(accountGroups.id, id), eq(accountGroups.userId, user.id)));
   });
 
   safeRevalidatePath('/');
@@ -234,12 +261,16 @@ export async function deleteAccountGroup(id: string) {
 }
 
 export async function reorderAccountGroups(orderedGroupIds: string[]) {
-  db.transaction((tx) => {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
     for (let i = 0; i < orderedGroupIds.length; i++) {
-      tx.update(accountGroups)
+      await tx
+        .update(accountGroups)
         .set({ sortOrder: i + 1, updatedAt: new Date() })
-        .where(eq(accountGroups.id, orderedGroupIds[i]))
-        .run();
+        .where(
+          and(eq(accountGroups.id, orderedGroupIds[i]), eq(accountGroups.userId, user.id))
+        );
     }
   });
 

@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth';
 import { getPaginatedTransactions } from '@/lib/actions/transactions';
 import { getAccountsWithBalances } from '@/lib/actions/accounts';
 import { getFlatCategories } from '@/lib/actions/categories';
@@ -13,6 +14,8 @@ interface PageProps {
 }
 
 export default async function TransactionsPage({ searchParams }: PageProps) {
+  await requireUser();
+
   const resolvedParams = await searchParams;
   const accountId = typeof resolvedParams.account === 'string' ? resolvedParams.account : undefined;
   const categoryId = typeof resolvedParams.category === 'string' ? resolvedParams.category : undefined;

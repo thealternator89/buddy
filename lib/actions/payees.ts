@@ -1,10 +1,11 @@
 'use server';
 
-import { db, sqlite } from '@/lib/db';
+import { db } from '@/lib/db';
 import { payees, categories, transactions, payeeRules } from '@/lib/db/schema';
+import { requireUser } from '@/lib/auth';
 import { PayeeRuleItem, RuleOperator } from '@/lib/payee-rules';
 import { and, asc, eq, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/sqlite-core';
+import { alias } from 'drizzle-orm/pg-core';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -47,9 +48,12 @@ export interface CreatePayeeRuleInput {
 }
 
 export async function getPayees(): Promise<PayeeWithRules[]> {
+  const user = await requireUser();
+
   const allPayees = await db
     .select()
     .from(payees)
+    .where(eq(payees.userId, user.id))
     .orderBy(asc(payees.priority), asc(payees.name));
 
   const allRules = await db
@@ -63,7 +67,11 @@ export async function getPayees(): Promise<PayeeWithRules[]> {
       sortOrder: payeeRules.sortOrder,
     })
     .from(payeeRules)
-    .leftJoin(categories, eq(payeeRules.categoryId, categories.id))
+    .leftJoin(
+      categories,
+      and(eq(payeeRules.categoryId, categories.id), eq(categories.userId, user.id))
+    )
+    .where(eq(payeeRules.userId, user.id))
     .orderBy(asc(payeeRules.sortOrder), asc(payeeRules.amountCents));
 
   const rulesMap = new Map<string, PayeeRuleItem[]>();
@@ -89,6 +97,7 @@ export async function getPayees(): Promise<PayeeWithRules[]> {
 }
 
 export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
+  const user = await requireUser();
   const parentCategories = alias(categories, 'parent_categories');
   const ruleParentCategories = alias(categories, 'rule_parent_categories');
 
@@ -103,8 +112,15 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       createdAt: payees.createdAt,
     })
     .from(payees)
-    .leftJoin(categories, eq(payees.defaultCategoryId, categories.id))
-    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
+    .leftJoin(
+      categories,
+      and(eq(payees.defaultCategoryId, categories.id), eq(categories.userId, user.id))
+    )
+    .leftJoin(
+      parentCategories,
+      and(eq(categories.parentId, parentCategories.id), eq(parentCategories.userId, user.id))
+    )
+    .where(eq(payees.userId, user.id))
     .orderBy(asc(payees.priority), asc(payees.name));
 
   const allRules = await db
@@ -119,8 +135,18 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       sortOrder: payeeRules.sortOrder,
     })
     .from(payeeRules)
-    .leftJoin(categories, eq(payeeRules.categoryId, categories.id))
-    .leftJoin(ruleParentCategories, eq(categories.parentId, ruleParentCategories.id))
+    .leftJoin(
+      categories,
+      and(eq(payeeRules.categoryId, categories.id), eq(categories.userId, user.id))
+    )
+    .leftJoin(
+      ruleParentCategories,
+      and(
+        eq(categories.parentId, ruleParentCategories.id),
+        eq(ruleParentCategories.userId, user.id)
+      )
+    )
+    .where(eq(payeeRules.userId, user.id))
     .orderBy(asc(payeeRules.sortOrder), asc(payeeRules.amountCents));
 
   const rulesMap = new Map<string, PayeeRuleItem[]>();
@@ -148,7 +174,7 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
       count: sql<number>`count(${transactions.id})`,
     })
     .from(transactions)
-    .where(sql`${transactions.payeeId} is not null`)
+    .where(and(eq(transactions.userId, user.id), sql`${transactions.payeeId} is not null`))
     .groupBy(transactions.payeeId);
 
   const statsMap = new Map<
@@ -196,6 +222,7 @@ export async function createPayee(
   rules?: CreatePayeeRuleInput[],
   priority: number = 1
 ) {
+  const user = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error('Payee name cannot be empty.');
@@ -204,7 +231,9 @@ export async function createPayee(
   const existing = await db
     .select({ id: payees.id, name: payees.name })
     .from(payees)
-    .where(sql`lower(${payees.name}) = lower(${trimmed})`)
+    .where(
+      and(eq(payees.userId, user.id), sql`lower(${payees.name}) = lower(${trimmed})`)
+    )
     .limit(1);
 
   if (existing.length > 0) {
@@ -213,32 +242,31 @@ export async function createPayee(
 
   const sanitizedPriority = Math.min(Math.max(Number(priority) ?? 1, 0), 3);
   const id = crypto.randomUUID();
-  sqlite.transaction(() => {
-    db.insert(payees)
-      .values({
-        id,
-        name: trimmed,
-        defaultCategoryId: defaultCategoryId || null,
-        priority: sanitizedPriority,
-      })
-      .run();
+
+  await db.transaction(async (tx) => {
+    await tx.insert(payees).values({
+      id,
+      userId: user.id,
+      name: trimmed,
+      defaultCategoryId: defaultCategoryId || null,
+      priority: sanitizedPriority,
+    });
 
     if (rules && rules.length > 0) {
       for (let i = 0; i < rules.length; i++) {
         const r = rules[i];
-        db.insert(payeeRules)
-          .values({
-            id: crypto.randomUUID(),
-            payeeId: id,
-            categoryId: r.categoryId,
-            operator: r.operator,
-            amountCents: r.amountCents,
-            sortOrder: i,
-          })
-          .run();
+        await tx.insert(payeeRules).values({
+          id: crypto.randomUUID(),
+          userId: user.id,
+          payeeId: id,
+          categoryId: r.categoryId,
+          operator: r.operator,
+          amountCents: r.amountCents,
+          sortOrder: i,
+        });
       }
     }
-  })();
+  });
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -257,6 +285,7 @@ export async function updatePayee(
     priority?: number;
   }
 ) {
+  const user = await requireUser();
   const trimmed = data.name.trim();
   if (!trimmed) {
     throw new Error('Payee name cannot be empty.');
@@ -265,7 +294,13 @@ export async function updatePayee(
   const existing = await db
     .select({ id: payees.id, name: payees.name })
     .from(payees)
-    .where(and(sql`lower(${payees.name}) = lower(${trimmed})`, sql`${payees.id} != ${id}`))
+    .where(
+      and(
+        eq(payees.userId, user.id),
+        sql`lower(${payees.name}) = lower(${trimmed})`,
+        sql`${payees.id} != ${id}`
+      )
+    )
     .limit(1);
 
   if (existing.length > 0) {
@@ -285,29 +320,31 @@ export async function updatePayee(
     updateFields.priority = Math.min(Math.max(Number(data.priority) ?? 1, 0), 3);
   }
 
-  sqlite.transaction(() => {
-    db.update(payees)
+  await db.transaction(async (tx) => {
+    await tx
+      .update(payees)
       .set(updateFields)
-      .where(eq(payees.id, id))
-      .run();
+      .where(and(eq(payees.id, id), eq(payees.userId, user.id)));
 
     if (data.rules !== undefined) {
-      db.delete(payeeRules).where(eq(payeeRules.payeeId, id)).run();
+      await tx
+        .delete(payeeRules)
+        .where(and(eq(payeeRules.payeeId, id), eq(payeeRules.userId, user.id)));
+
       for (let i = 0; i < data.rules.length; i++) {
         const r = data.rules[i];
-        db.insert(payeeRules)
-          .values({
-            id: crypto.randomUUID(),
-            payeeId: id,
-            categoryId: r.categoryId,
-            operator: r.operator,
-            amountCents: r.amountCents,
-            sortOrder: i,
-          })
-          .run();
+        await tx.insert(payeeRules).values({
+          id: crypto.randomUUID(),
+          userId: user.id,
+          payeeId: id,
+          categoryId: r.categoryId,
+          operator: r.operator,
+          amountCents: r.amountCents,
+          sortOrder: i,
+        });
       }
     }
-  })();
+  });
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -318,11 +355,13 @@ export async function updatePayee(
 }
 
 export async function updatePayeePriority(id: string, priority: number) {
+  const user = await requireUser();
   const sanitizedPriority = Math.min(Math.max(Number(priority) ?? 1, 0), 3);
-  db.update(payees)
+
+  await db
+    .update(payees)
     .set({ priority: sanitizedPriority })
-    .where(eq(payees.id, id))
-    .run();
+    .where(and(eq(payees.id, id), eq(payees.userId, user.id)));
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -333,10 +372,16 @@ export async function updatePayeePriority(id: string, priority: number) {
 }
 
 export async function deletePayee(id: string) {
-  sqlite.transaction(() => {
-    db.delete(payeeRules).where(eq(payeeRules.payeeId, id)).run();
-    db.delete(payees).where(eq(payees.id, id)).run();
-  })();
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(payeeRules)
+      .where(and(eq(payeeRules.payeeId, id), eq(payeeRules.userId, user.id)));
+    await tx
+      .delete(payees)
+      .where(and(eq(payees.id, id), eq(payees.userId, user.id)));
+  });
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -347,14 +392,17 @@ export async function deletePayee(id: string) {
 }
 
 export async function getOrCreatePayee(name: string, defaultCategoryId?: string) {
+  const user = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) return null;
 
-  // Search case-insensitively
+  // Search case-insensitively for this user
   const existing = await db
     .select()
     .from(payees)
-    .where(sql`lower(${payees.name}) = lower(${trimmed})`)
+    .where(
+      and(eq(payees.userId, user.id), sql`lower(${payees.name}) = lower(${trimmed})`)
+    )
     .limit(1);
 
   if (existing.length > 0) {
@@ -362,14 +410,13 @@ export async function getOrCreatePayee(name: string, defaultCategoryId?: string)
   }
 
   const id = crypto.randomUUID();
-  db.insert(payees)
-    .values({
-      id,
-      name: trimmed,
-      defaultCategoryId: defaultCategoryId || null,
-      priority: 1,
-    })
-    .run();
+  await db.insert(payees).values({
+    id,
+    userId: user.id,
+    name: trimmed,
+    defaultCategoryId: defaultCategoryId || null,
+    priority: 1,
+  });
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');
@@ -378,10 +425,12 @@ export async function getOrCreatePayee(name: string, defaultCategoryId?: string)
 }
 
 export async function updatePayeeDefaultCategory(id: string, defaultCategoryId: string | null) {
-  db.update(payees)
+  const user = await requireUser();
+
+  await db
+    .update(payees)
     .set({ defaultCategoryId })
-    .where(eq(payees.id, id))
-    .run();
+    .where(and(eq(payees.id, id), eq(payees.userId, user.id)));
 
   safeRevalidatePath('/manage');
   safeRevalidatePath('/categories');

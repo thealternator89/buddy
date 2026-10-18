@@ -8,8 +8,9 @@ Buddy gives you total control over your financial life. With multi-account track
 
 ## Key Highlights
 
-- 🔒 **Local-First & Private**: Your financial data resides in a local SQLite database on your machine. No telemetry, no external accounts, no cloud lock-in.
-- ⚡ **Blazing Fast**: Powered by Next.js Server Components, Server Actions, and SQLite Write-Ahead Logging (WAL) for near-instant reads and writes.
+- 🔐 **Multi-User & Authenticated**: Built-in Email & Password authentication with database-backed sessions and strict per-user tenant isolation.
+- 🐘 **PostgreSQL Backed**: Ready for cloud hosting or self-hosting with PostgreSQL and Drizzle ORM.
+- ⚡ **Blazing Fast**: Powered by Next.js 16 Server Components and Server Actions for fast, type-safe reads and writes.
 - 🎯 **Smart Categorization**: Set conditional amount rules on payees to automatically assign categories as you type.
 - 🌳 **Multi-Level Categories**: Organize spending into nested category trees with automated rollup totals up the hierarchy.
 - 🔄 **Double-Entry Transfers**: Transfer funds between accounts with synchronized, linked records.
@@ -74,12 +75,13 @@ Buddy gives you total control over your financial life. With multi-account track
 
 | Layer | Technology | Description |
 |---|---|---|
-| **Framework** | [Next.js](https://nextjs.org/) 16 (App Router) | React Server Components, Server Actions, streaming layouts |
+| **Framework** | [Next.js](https://nextjs.org/) 16 (App Router) | React Server Components, Server Actions, Proxy route protection |
 | **UI Library** | [React](https://react.dev/) 19 | Client components, hooks, transitions, and optimistic UI |
 | **Styling** | [Tailwind CSS](https://tailwindcss.com/) v4 | Utility-first responsive design with dark mode styling |
 | **Icons** | [Lucide React](https://lucide.dev/) | Clean, consistent vector icons |
-| **Database** | [SQLite](https://www.sqlite.org/) via [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) | Fast, embedded, local database running in WAL mode |
+| **Database** | [PostgreSQL](https://www.postgresql.org/) via [`postgres`](https://github.com/porsager/postgres) | Multi-user relational database for cloud or self-hosted deployments |
 | **ORM** | [Drizzle ORM](https://orm.drizzle.team/) & Drizzle Kit | Type-safe SQL schema, migrations, and relational queries |
+| **Authentication** | Session-Based Auth (`crypto.scrypt`) | Self-contained Email & Password authentication stored in PostgreSQL |
 | **CSV Engine** | [PapaParse](https://www.papaparse.com/) | Robust client/server CSV streaming and parsing |
 | **Language** | [TypeScript](https://www.typescriptlang.org/) 5 | Full-stack end-to-end type safety |
 
@@ -90,7 +92,7 @@ Buddy gives you total control over your financial life. With multi-account track
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v20.x or higher recommended)
-- `npm` (or `pnpm` / `yarn` / `bun`)
+- A running **PostgreSQL** database (local, Docker, or hosted on Neon / Supabase / Railway / Render)
 
 ### Installation
 
@@ -105,24 +107,33 @@ Buddy gives you total control over your financial life. With multi-account track
    npm install
    ```
 
-3. **Initialize the SQLite database:**
-   Push the Drizzle schema to initialize your local SQLite database:
+3. **Configure environment variables:**
+   Copy `.env.example` to `.env` and set your PostgreSQL `DATABASE_URL`:
+   ```bash
+   cp .env.example .env
+   ```
+   *(Optional)* Start a local PostgreSQL instance with Docker Compose:
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Push the PostgreSQL schema:**
    ```bash
    npm run db:push
    ```
 
-4. **(Optional) Seed sample data:**
-   Populate your database with sample accounts, hierarchical categories, payees, and transactions:
+5. **(Optional) Seed demo user & sample data:**
+   Populate the database with a demo user (`demo@buddy.local` / `password123`) and sample accounts, categories, payees, and transactions:
    ```bash
    npm run db:seed
    ```
 
-5. **Start the development server:**
+6. **Start the development server:**
    ```bash
    npm run dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser to view Buddy.
+7. Open [http://localhost:3000](http://localhost:3000) in your browser to sign in or create a new account.
 
 ---
 
@@ -147,7 +158,7 @@ For an in-depth explanation of Buddy's internal technical architecture, domain m
     // ...
   };
   ```
-- **Database Location**: Buddy defaults to storing data at `./data/buddy.db`. You can override this by setting the `DATABASE_URL` environment variable.
+- **Database Connection**: Set `DATABASE_URL` in `.env` (defaults to `postgresql://postgres:postgres@localhost:5432/buddy`).
 
 ---
 
@@ -159,5 +170,6 @@ For an in-depth explanation of Buddy's internal technical architecture, domain m
 | `npm run build` | Compiles the production build |
 | `npm run start` | Runs the compiled production server |
 | `npm run lint` | Runs ESLint checks across the codebase |
-| `npm run db:push` | Applies schema changes directly to the local SQLite database |
-| `npm run db:seed` | Resets and seeds the local database with sample categories, payees, and transactions |
+| `npm run db:push` | Applies Drizzle schema changes to the PostgreSQL database |
+| `npm run db:seed` | Seeds a demo user (`demo@buddy.local` / `password123`) with sample financial data |
+

@@ -2,7 +2,8 @@
 
 import { db } from '@/lib/db';
 import { categories, transactions } from '@/lib/db/schema';
-import { asc, eq, sql, inArray } from 'drizzle-orm';
+import { requireUser } from '@/lib/auth';
+import { and, asc, eq, sql, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 import {
@@ -15,13 +16,15 @@ import {
 export type { CategoryNode, CategoryFlatItem };
 
 /**
- * Fetches the entire non-archived category tree with rollups and metrics.
+ * Fetches the entire non-archived category tree with rollups and metrics for the current user.
  */
 export async function getCategoryTree(): Promise<CategoryNode[]> {
+  const user = await requireUser();
+
   const allCategories = await db
     .select()
     .from(categories)
-    .where(eq(categories.isArchived, false))
+    .where(and(eq(categories.userId, user.id), eq(categories.isArchived, false)))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 
   // Compute spending per category (expenses are negative amountCents)
@@ -32,7 +35,7 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
       count: sql<number>`count(${transactions.id})`,
     })
     .from(transactions)
-    .where(sql`${transactions.categoryId} is not null`)
+    .where(and(eq(transactions.userId, user.id), sql`${transactions.categoryId} is not null`))
     .groupBy(transactions.categoryId);
 
   const statsMap = new Map<string, { totalSpent: number; count: number }>();
@@ -99,9 +102,12 @@ export async function getFlatCategories(): Promise<CategoryFlatItem[]> {
  * Essential for subtree filtering in transactions.
  */
 export async function getCategorySubtreeIds(categoryId: string): Promise<string[]> {
+  const user = await requireUser();
+
   const allCategories = await db
     .select({ id: categories.id, parentId: categories.parentId })
-    .from(categories);
+    .from(categories)
+    .where(eq(categories.userId, user.id));
 
   const childrenMap = new Map<string, string[]>();
   for (const c of allCategories) {
@@ -140,6 +146,7 @@ async function wouldCreateCycle(categoryId: string, targetParentId: string): Pro
  * Create a new category at root or under an existing parent.
  */
 export async function createCategory(name: string, parentId?: string | null) {
+  const user = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error('Category name cannot be empty.');
@@ -151,7 +158,7 @@ export async function createCategory(name: string, parentId?: string | null) {
     const parent = await db
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.id, pid))
+      .where(and(eq(categories.id, pid), eq(categories.userId, user.id)))
       .limit(1);
     if (parent.length === 0) {
       throw new Error('Parent category does not exist.');
@@ -161,20 +168,24 @@ export async function createCategory(name: string, parentId?: string | null) {
   const existingSiblings = await db
     .select({ id: categories.id })
     .from(categories)
-    .where(pid ? eq(categories.parentId, pid) : sql`${categories.parentId} IS NULL`);
+    .where(
+      and(
+        eq(categories.userId, user.id),
+        pid ? eq(categories.parentId, pid) : sql`${categories.parentId} IS NULL`
+      )
+    );
 
   const id = crypto.randomUUID();
   const nextOrder = existingSiblings.length + 1;
 
-  db.insert(categories)
-    .values({
-      id,
-      name: trimmed,
-      parentId: pid,
-      sortOrder: nextOrder,
-      isArchived: false,
-    })
-    .run();
+  await db.insert(categories).values({
+    id,
+    userId: user.id,
+    name: trimmed,
+    parentId: pid,
+    sortOrder: nextOrder,
+    isArchived: false,
+  });
 
   revalidateAllCategoryPaths();
   return { success: true, id };
@@ -187,6 +198,7 @@ export async function updateCategory(
   id: string,
   data: { name?: string; parentId?: string | null }
 ) {
+  const user = await requireUser();
   const updateData: { name?: string; parentId?: string | null } = {};
 
   if (data.name !== undefined) {
@@ -201,6 +213,15 @@ export async function updateCategory(
     const newParentId = data.parentId && data.parentId.trim() ? data.parentId.trim() : null;
 
     if (newParentId) {
+      const parentExists = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.id, newParentId), eq(categories.userId, user.id)))
+        .limit(1);
+      if (parentExists.length === 0) {
+        throw new Error('Parent category does not exist.');
+      }
+
       if (await wouldCreateCycle(id, newParentId)) {
         throw new Error('Cannot move a category under itself or one of its descendants.');
       }
@@ -212,10 +233,10 @@ export async function updateCategory(
     return { success: true };
   }
 
-  db.update(categories)
+  await db
+    .update(categories)
     .set(updateData)
-    .where(eq(categories.id, id))
-    .run();
+    .where(and(eq(categories.id, id), eq(categories.userId, user.id)));
 
   revalidateAllCategoryPaths();
   return { success: true };
@@ -225,12 +246,13 @@ export async function updateCategory(
  * Archives a category and all of its descendant subcategories.
  */
 export async function archiveCategory(id: string) {
+  const user = await requireUser();
   const subtreeIds = await getCategorySubtreeIds(id);
 
-  db.update(categories)
+  await db
+    .update(categories)
     .set({ isArchived: true })
-    .where(inArray(categories.id, subtreeIds))
-    .run();
+    .where(and(eq(categories.userId, user.id), inArray(categories.id, subtreeIds)));
 
   revalidateAllCategoryPaths();
   return { success: true };
@@ -240,13 +262,14 @@ export async function archiveCategory(id: string) {
  * Delete category if safe (no transactions in subtree).
  */
 export async function deleteCategory(id: string) {
+  const user = await requireUser();
   const subtreeIds = await getCategorySubtreeIds(id);
 
-  // Check if any category in subtree has transactions
+  // Check if any category in subtree has transactions for this user
   const txCount = await db
     .select({ count: sql<number>`count(${transactions.id})` })
     .from(transactions)
-    .where(inArray(transactions.categoryId, subtreeIds));
+    .where(and(eq(transactions.userId, user.id), inArray(transactions.categoryId, subtreeIds)));
 
   const count = Number(txCount[0]?.count || 0);
   if (count > 0) {
@@ -255,18 +278,22 @@ export async function deleteCategory(id: string) {
     );
   }
 
-  db.delete(categories)
-    .where(inArray(categories.id, subtreeIds))
-    .run();
+  await db
+    .delete(categories)
+    .where(and(eq(categories.userId, user.id), inArray(categories.id, subtreeIds)));
 
   revalidateAllCategoryPaths();
   return { success: true };
 }
 
 function revalidateAllCategoryPaths() {
-  revalidatePath('/manage');
-  revalidatePath('/categories');
-  revalidatePath('/transactions');
-  revalidatePath('/accounts');
-  revalidatePath('/');
+  try {
+    revalidatePath('/manage');
+    revalidatePath('/categories');
+    revalidatePath('/transactions');
+    revalidatePath('/accounts');
+    revalidatePath('/');
+  } catch {
+    // Ignore outside request context
+  }
 }

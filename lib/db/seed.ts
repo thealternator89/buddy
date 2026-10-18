@@ -1,16 +1,27 @@
-import { db } from './index';
-import { accountGroups, accounts, categories, payees, transactions } from './schema';
+import { eq } from 'drizzle-orm';
+import { db, pgClient } from './index';
+import { accountGroups, accounts, categories, payees, transactions, users } from './schema';
+import { hashPassword } from '../auth';
 import crypto from 'crypto';
 
-export async function seed() {
-  console.log('🌱 Seeding database...');
+const DEMO_EMAIL = 'demo@buddy.local';
+const DEMO_PASSWORD = 'password123';
 
-  // Clear existing records if any
-  db.delete(transactions).run();
-  db.delete(payees).run();
-  db.delete(categories).run();
-  db.delete(accounts).run();
-  db.delete(accountGroups).run();
+export async function seed() {
+  console.log('🌱 Seeding PostgreSQL database...');
+
+  // Remove existing demo user (cascades to all demo user records)
+  await db.delete(users).where(eq(users.email, DEMO_EMAIL));
+
+  const userId = crypto.randomUUID();
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
+
+  await db.insert(users).values({
+    id: userId,
+    email: DEMO_EMAIL,
+    name: 'Demo User',
+    passwordHash,
+  });
 
   // 1. Category Tree Hierarchy
   // Level 1: Root Categories
@@ -34,34 +45,52 @@ export async function seed() {
   const catElectricityId = crypto.randomUUID();
   const catInternetId = crypto.randomUUID();
 
-  db.insert(categories).values([
+  await db.insert(categories).values([
     // Root level categories
-    { id: catGroceriesId, parentId: null, name: 'Groceries', sortOrder: 1 },
-    { id: catEatingOutId, parentId: null, name: 'Eating out', sortOrder: 2 },
-    { id: catHousingId, parentId: null, name: 'Housing & Living', sortOrder: 3 },
-    { id: catIncomeId, parentId: null, name: 'Income', sortOrder: 4 },
+    { id: catGroceriesId, userId, parentId: null, name: 'Groceries', sortOrder: 1 },
+    { id: catEatingOutId, userId, parentId: null, name: 'Eating out', sortOrder: 2 },
+    { id: catHousingId, userId, parentId: null, name: 'Housing & Living', sortOrder: 3 },
+    { id: catIncomeId, userId, parentId: null, name: 'Income', sortOrder: 4 },
 
     // Groceries children (Level 2)
-    { id: catSupermarketId, parentId: catGroceriesId, name: 'Supermarket', sortOrder: 1 },
-    { id: catConvenienceId, parentId: catGroceriesId, name: 'Convenience', sortOrder: 2 },
+    { id: catSupermarketId, userId, parentId: catGroceriesId, name: 'Supermarket', sortOrder: 1 },
+    { id: catConvenienceId, userId, parentId: catGroceriesId, name: 'Convenience', sortOrder: 2 },
 
     // Eating out children (Level 2)
-    { id: catBarId, parentId: catEatingOutId, name: 'Bar', sortOrder: 1 },
-    { id: catRestaurantId, parentId: catEatingOutId, name: 'Restaurant', sortOrder: 2 },
-    { id: catCoffeeId, parentId: catEatingOutId, name: 'Cafes & Coffee', sortOrder: 3 },
+    { id: catBarId, userId, parentId: catEatingOutId, name: 'Bar', sortOrder: 1 },
+    { id: catRestaurantId, userId, parentId: catEatingOutId, name: 'Restaurant', sortOrder: 2 },
+    { id: catCoffeeId, userId, parentId: catEatingOutId, name: 'Cafes & Coffee', sortOrder: 3 },
 
     // Housing children (Level 2)
-    { id: catRentId, parentId: catHousingId, name: 'Rent / Mortgage', sortOrder: 1 },
-    { id: catUtilitiesId, parentId: catHousingId, name: 'Utilities', sortOrder: 2 },
+    { id: catRentId, userId, parentId: catHousingId, name: 'Rent / Mortgage', sortOrder: 1 },
+    { id: catUtilitiesId, userId, parentId: catHousingId, name: 'Utilities', sortOrder: 2 },
 
     // Utilities children (Level 3)
-    { id: catElectricityId, parentId: catUtilitiesId, name: 'Power & Electricity', sortOrder: 1 },
-    { id: catInternetId, parentId: catUtilitiesId, name: 'Internet & Mobile', sortOrder: 2 },
+    {
+      id: catElectricityId,
+      userId,
+      parentId: catUtilitiesId,
+      name: 'Power & Electricity',
+      sortOrder: 1,
+    },
+    {
+      id: catInternetId,
+      userId,
+      parentId: catUtilitiesId,
+      name: 'Internet & Mobile',
+      sortOrder: 2,
+    },
 
     // Income children (Level 2)
-    { id: catSalaryId, parentId: catIncomeId, name: 'Salary & Wages', sortOrder: 1 },
-    { id: catInvestmentsId, parentId: catIncomeId, name: 'Investments & Dividends', sortOrder: 2 },
-  ]).run();
+    { id: catSalaryId, userId, parentId: catIncomeId, name: 'Salary & Wages', sortOrder: 1 },
+    {
+      id: catInvestmentsId,
+      userId,
+      parentId: catIncomeId,
+      name: 'Investments & Dividends',
+      sortOrder: 2,
+    },
+  ]);
 
   // 2. Payees (assigned to either parent or child categories!)
   const payeePaknsaveId = crypto.randomUUID();
@@ -75,36 +104,90 @@ export async function seed() {
   const payeeEmployerId = crypto.randomUUID();
   const payeeOldBakeryId = crypto.randomUUID();
 
-  db.insert(payees).values([
+  await db.insert(payees).values([
     // Priority 0: Highest (quick-picks displayed before entry)
-    { id: payeePaknsaveId, name: "Pak'nSave", defaultCategoryId: catSupermarketId, priority: 0 },
-    { id: payeeMojoId, name: 'Mojo Coffee', defaultCategoryId: catCoffeeId, priority: 0 },
+    {
+      id: payeePaknsaveId,
+      userId,
+      name: "Pak'nSave",
+      defaultCategoryId: catSupermarketId,
+      priority: 0,
+    },
+    { id: payeeMojoId, userId, name: 'Mojo Coffee', defaultCategoryId: catCoffeeId, priority: 0 },
 
     // Priority 1: Standard (current behaviour)
-    { id: payeeCountdownId, name: 'Woolworths / Countdown', defaultCategoryId: catSupermarketId, priority: 1 },
-    { id: payeeCornerPubId, name: 'The Craft Bar & Taphouse', defaultCategoryId: catBarId, priority: 1 },
-    { id: payeePastaBistroId, name: 'Bella Italia Restaurant', defaultCategoryId: catRestaurantId, priority: 1 },
-    { id: payeeMercuryId, name: 'Mercury Energy', defaultCategoryId: catElectricityId, priority: 1 },
-    { id: payeeSparkId, name: 'Spark NZ', defaultCategoryId: catInternetId, priority: 1 },
-    { id: payeeEmployerId, name: 'Employer Inc', defaultCategoryId: catSalaryId, priority: 1 },
+    {
+      id: payeeCountdownId,
+      userId,
+      name: 'Woolworths / Countdown',
+      defaultCategoryId: catSupermarketId,
+      priority: 1,
+    },
+    {
+      id: payeeCornerPubId,
+      userId,
+      name: 'The Craft Bar & Taphouse',
+      defaultCategoryId: catBarId,
+      priority: 1,
+    },
+    {
+      id: payeePastaBistroId,
+      userId,
+      name: 'Bella Italia Restaurant',
+      defaultCategoryId: catRestaurantId,
+      priority: 1,
+    },
+    {
+      id: payeeMercuryId,
+      userId,
+      name: 'Mercury Energy',
+      defaultCategoryId: catElectricityId,
+      priority: 1,
+    },
+    {
+      id: payeeSparkId,
+      userId,
+      name: 'Spark NZ',
+      defaultCategoryId: catInternetId,
+      priority: 1,
+    },
+    {
+      id: payeeEmployerId,
+      userId,
+      name: 'Employer Inc',
+      defaultCategoryId: catSalaryId,
+      priority: 1,
+    },
 
     // Priority 2: Low (appears at bottom of list even if better match)
-    { id: payeeLocalCornerId, name: 'City Convenience Store', defaultCategoryId: catConvenienceId, priority: 2 },
+    {
+      id: payeeLocalCornerId,
+      userId,
+      name: 'City Convenience Store',
+      defaultCategoryId: catConvenienceId,
+      priority: 2,
+    },
 
     // Priority 3: Archived (hidden from selection lists, visible in existing transactions)
-    { id: payeeOldBakeryId, name: 'Old Corner Bakery (Closed)', defaultCategoryId: catConvenienceId, priority: 3 },
-  ]).run();
+    {
+      id: payeeOldBakeryId,
+      userId,
+      name: 'Old Corner Bakery (Closed)',
+      defaultCategoryId: catConvenienceId,
+      priority: 3,
+    },
+  ]);
 
   // 3. Account Groups
   const grpEverydayId = crypto.randomUUID();
   const grpSavingsId = crypto.randomUUID();
   const grpCardsId = crypto.randomUUID();
 
-  db.insert(accountGroups).values([
-    { id: grpEverydayId, name: 'Everyday Banking', icon: 'Wallet', sortOrder: 1 },
-    { id: grpSavingsId, name: 'Savings & Goals', icon: 'PiggyBank', sortOrder: 2 },
-    { id: grpCardsId, name: 'Credit Cards', icon: 'CreditCard', sortOrder: 3 },
-  ]).run();
+  await db.insert(accountGroups).values([
+    { id: grpEverydayId, userId, name: 'Everyday Banking', icon: 'Wallet', sortOrder: 1 },
+    { id: grpSavingsId, userId, name: 'Savings & Goals', icon: 'PiggyBank', sortOrder: 2 },
+    { id: grpCardsId, userId, name: 'Credit Cards', icon: 'CreditCard', sortOrder: 3 },
+  ]);
 
   // 4. Accounts
   const accCheckingId = crypto.randomUUID();
@@ -112,12 +195,37 @@ export async function seed() {
   const accCreditId = crypto.randomUUID();
   const accCashId = crypto.randomUUID();
 
-  db.insert(accounts).values([
-    { id: accCheckingId, groupId: grpEverydayId, name: 'Everyday Checking', type: 'checking', icon: 'Wallet', sortOrder: 1 },
-    { id: accCashId, groupId: grpEverydayId, name: 'Cash Wallet', type: 'cash', icon: 'Banknote', sortOrder: 2 },
-    { id: accSavingsId, groupId: grpSavingsId, name: 'High Interest Savings', type: 'savings', icon: 'PiggyBank', sortOrder: 1 },
+  await db.insert(accounts).values([
+    {
+      id: accCheckingId,
+      userId,
+      groupId: grpEverydayId,
+      name: 'Everyday Checking',
+      type: 'checking',
+      icon: 'Wallet',
+      sortOrder: 1,
+    },
+    {
+      id: accCashId,
+      userId,
+      groupId: grpEverydayId,
+      name: 'Cash Wallet',
+      type: 'cash',
+      icon: 'Banknote',
+      sortOrder: 2,
+    },
+    {
+      id: accSavingsId,
+      userId,
+      groupId: grpSavingsId,
+      name: 'High Interest Savings',
+      type: 'savings',
+      icon: 'PiggyBank',
+      sortOrder: 1,
+    },
     {
       id: accCreditId,
+      userId,
       groupId: grpCardsId,
       name: 'Visa Rewards Card',
       type: 'credit',
@@ -126,7 +234,7 @@ export async function seed() {
       creditLimitCents: 500000,
       balanceDisplayMode: 'available',
     },
-  ]).run();
+  ]);
 
   // 5. Initial / Sample Transactions
   const today = new Date().toISOString().slice(0, 10);
@@ -137,9 +245,10 @@ export async function seed() {
   };
 
   // Starting balances
-  db.insert(transactions).values([
+  await db.insert(transactions).values([
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCheckingId,
       amountCents: 250000, // $2,500.00
       date: daysAgo(30),
@@ -148,6 +257,7 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accSavingsId,
       amountCents: 850000, // $8,500.00
       date: daysAgo(30),
@@ -156,6 +266,7 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCreditId,
       amountCents: -34020, // -$340.20
       date: daysAgo(30),
@@ -164,18 +275,20 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCashId,
       amountCents: 12000, // $120.00
       date: daysAgo(30),
       notes: 'Cash on hand',
       isCleared: true,
     },
-  ]).run();
+  ]);
 
-  // Recent transactions (testing both parent and child category selection)
-  db.insert(transactions).values([
+  // Recent transactions
+  await db.insert(transactions).values([
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCheckingId,
       payeeId: payeeEmployerId,
       categoryId: catSalaryId,
@@ -186,9 +299,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCheckingId,
       payeeId: payeePaknsaveId,
-      categoryId: catSupermarketId, // Child category
+      categoryId: catSupermarketId,
       amountCents: -18450, // -$184.50
       date: daysAgo(10),
       notes: 'Weekly supermarket groceries run',
@@ -196,9 +310,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCheckingId,
       payeeId: payeeMercuryId,
-      categoryId: catElectricityId, // Level 3 child
+      categoryId: catElectricityId,
       amountCents: -14520, // -$145.20
       date: daysAgo(8),
       notes: 'Electricity bill',
@@ -206,9 +321,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCreditId,
       payeeId: payeeLocalCornerId,
-      categoryId: catConvenienceId, // Child category
+      categoryId: catConvenienceId,
       amountCents: -1850, // -$18.50
       date: daysAgo(6),
       notes: 'Milk & snacks',
@@ -216,9 +332,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCreditId,
       payeeId: payeeMojoId,
-      categoryId: catCoffeeId, // Child category
+      categoryId: catCoffeeId,
       amountCents: -580, // -$5.80
       date: daysAgo(3),
       notes: 'Flat white',
@@ -226,9 +343,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCreditId,
       payeeId: payeePastaBistroId,
-      categoryId: catRestaurantId, // Child category
+      categoryId: catRestaurantId,
       amountCents: -8900, // -$89.00
       date: daysAgo(2),
       notes: 'Dinner date with friends',
@@ -236,9 +354,10 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCreditId,
       payeeId: payeeCornerPubId,
-      categoryId: catBarId, // Child category
+      categoryId: catBarId,
       amountCents: -3400, // -$34.00
       date: daysAgo(1),
       notes: 'Friday drinks',
@@ -246,22 +365,24 @@ export async function seed() {
     },
     {
       id: crypto.randomUUID(),
+      userId,
       accountId: accCheckingId,
-      categoryId: catGroceriesId, // Parent category directly!
+      categoryId: catGroceriesId,
       amountCents: -4500, // -$45.00
       date: today,
       notes: 'General grocery market stall',
       isCleared: false,
     },
-  ]).run();
+  ]);
 
   // Inter-account transfer: $400 from Checking to Savings
   const transferOutId = crypto.randomUUID();
   const transferInId = crypto.randomUUID();
 
-  db.insert(transactions).values([
+  await db.insert(transactions).values([
     {
       id: transferOutId,
+      userId,
       accountId: accCheckingId,
       amountCents: -40000, // -$400.00
       date: daysAgo(5),
@@ -271,6 +392,7 @@ export async function seed() {
     },
     {
       id: transferInId,
+      userId,
       accountId: accSavingsId,
       amountCents: 40000, // +$400.00
       date: daysAgo(5),
@@ -278,14 +400,18 @@ export async function seed() {
       isCleared: true,
       transferId: transferOutId,
     },
-  ]).run();
+  ]);
 
-  console.log('✅ Seed completed successfully!');
+  console.log(`✅ Seed completed! Demo account: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
 seed()
-  .then(() => process.exit(0))
-  .catch((err) => {
+  .then(async () => {
+    await pgClient.end();
+    process.exit(0);
+  })
+  .catch(async (err) => {
     console.error('Seed failed:', err);
+    await pgClient.end();
     process.exit(1);
   });

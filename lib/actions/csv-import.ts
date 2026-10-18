@@ -1,10 +1,11 @@
 'use server';
 
-import { db, sqlite } from '@/lib/db';
+import { db } from '@/lib/db';
 import { accounts, categories, payees, transactions, payeeRules } from '@/lib/db/schema';
+import { requireUser } from '@/lib/auth';
 import { parseCsv, parseCsvCategory, ParsedCsvRow } from '@/lib/csv';
 import { resolvePayeeCategory, PayeeRuleItem, RuleOperator } from '@/lib/payee-rules';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
@@ -29,6 +30,7 @@ export interface CsvImportResult {
 }
 
 export async function importCsvTransactions(csvContent: string): Promise<CsvImportResult> {
+  const user = await requireUser();
   const parseSummary = parseCsv(csvContent);
 
   if (parseSummary.totalRows === 0) {
@@ -62,14 +64,15 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
     };
   }
 
-  // 1. Preload existing entities for O(1) case-insensitive lookups
+  // 1. Preload existing entities for this user for O(1) case-insensitive lookups
   const existingAccounts = await db
     .select({
       id: accounts.id,
       name: accounts.name,
       sortOrder: accounts.sortOrder,
     })
-    .from(accounts);
+    .from(accounts)
+    .where(eq(accounts.userId, user.id));
 
   const existingCategories = await db
     .select({
@@ -78,7 +81,8 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
       parentId: categories.parentId,
       sortOrder: categories.sortOrder,
     })
-    .from(categories);
+    .from(categories)
+    .where(eq(categories.userId, user.id));
 
   const existingPayees = await db
     .select({
@@ -87,7 +91,8 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
       defaultCategoryId: payees.defaultCategoryId,
       priority: payees.priority,
     })
-    .from(payees);
+    .from(payees)
+    .where(eq(payees.userId, user.id));
 
   const allRules = await db
     .select({
@@ -99,6 +104,7 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
       sortOrder: payeeRules.sortOrder,
     })
     .from(payeeRules)
+    .where(eq(payeeRules.userId, user.id))
     .orderBy(asc(payeeRules.sortOrder), asc(payeeRules.amountCents));
 
   // In-memory maps
@@ -152,98 +158,14 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
   let importedTransactions = 0;
   let importedTransfers = 0;
 
-  // Helper: get or create account
-  function getOrCreateAccount(name: string): string {
-    const trimmed = name.trim();
-    const key = trimmed.toLowerCase();
-    const existing = accountMap.get(key);
-    if (existing) return existing.id;
-
-    const id = crypto.randomUUID();
-    maxAccountOrder += 1;
-
-    db.insert(accounts)
-      .values({
-        id,
-        name: trimmed,
-        type: 'checking',
-        groupId: null,
-        icon: 'wallet',
-        sortOrder: maxAccountOrder,
-        excludeFromNetWorth: false,
-        isArchived: false,
-      })
-      .run();
-
-    accountMap.set(key, { id, name: trimmed });
-    createdAccounts.add(trimmed);
-    return id;
-  }
-
-  // Helper: get or create category
-  function getOrCreateCategory(name: string): string {
-    const trimmed = name.trim();
-    const key = trimmed.toLowerCase();
-    const existing = categoryMap.get(key);
-    if (existing) return existing.id;
-
-    const id = crypto.randomUUID();
-    maxCategoryOrder += 1;
-
-    db.insert(categories)
-      .values({
-        id,
-        name: trimmed,
-        parentId: null,
-        sortOrder: maxCategoryOrder,
-        isArchived: false,
-      })
-      .run();
-
-    categoryMap.set(key, { id, name: trimmed });
-    createdCategories.add(trimmed);
-    return id;
-  }
-
-  // Helper: get or create payee
-  function getOrCreatePayee(name: string, defaultCategoryId?: string | null): string {
-    const trimmed = name.trim();
-    const key = trimmed.toLowerCase();
-    const existing = payeeMap.get(key);
-    if (existing) {
-      if (defaultCategoryId && !existing.defaultCategoryId) {
-        db.update(payees)
-          .set({ defaultCategoryId })
-          .where(eq(payees.id, existing.id))
-          .run();
-        existing.defaultCategoryId = defaultCategoryId;
-      }
-      return existing.id;
-    }
-
-    const id = crypto.randomUUID();
-    db.insert(payees)
-      .values({
-        id,
-        name: trimmed,
-        defaultCategoryId: defaultCategoryId || null,
-        priority: 1,
-      })
-      .run();
-
-    payeeMap.set(key, { id, name: trimmed, defaultCategoryId: defaultCategoryId || null });
-    createdPayees.add(trimmed);
-    return id;
-  }
-
   // Separate transfers and standard transactions
   const transferRows = parseSummary.validRows.filter((r) => r.isTransfer);
   const standardRows = parseSummary.validRows.filter((r) => !r.isTransfer);
 
-  // Match paired transfer rows within the CSV (e.g. Savings -> Freedom -22 and Freedom -> Savings +22)
+  // Match paired transfer rows within the CSV
   interface MatchedTransferPair {
     outRow: ParsedCsvRow; // outflow leg (amountCents < 0)
-    inRow: ParsedCsvRow;  // inflow leg (amountCents > 0)
+    inRow: ParsedCsvRow; // inflow leg (amountCents > 0)
   }
 
   const matchedPairs: MatchedTransferPair[] = [];
@@ -270,13 +192,97 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
     }
   }
 
-  // Execute import atomically inside a single SQLite transaction
-  sqlite.transaction(() => {
+  // Execute import atomically inside a single PostgreSQL transaction
+  await db.transaction(async (tx) => {
+    // Helper: get or create account
+    async function getOrCreateAccount(name: string): Promise<string> {
+      const trimmed = name.trim();
+      const key = trimmed.toLowerCase();
+      const existing = accountMap.get(key);
+      if (existing) return existing.id;
+
+      const id = crypto.randomUUID();
+      maxAccountOrder += 1;
+
+      await tx.insert(accounts).values({
+        id,
+        userId: user.id,
+        name: trimmed,
+        type: 'checking',
+        groupId: null,
+        icon: 'wallet',
+        sortOrder: maxAccountOrder,
+        excludeFromNetWorth: false,
+        isArchived: false,
+      });
+
+      accountMap.set(key, { id, name: trimmed });
+      createdAccounts.add(trimmed);
+      return id;
+    }
+
+    // Helper: get or create category
+    async function getOrCreateCategory(name: string): Promise<string> {
+      const trimmed = name.trim();
+      const key = trimmed.toLowerCase();
+      const existing = categoryMap.get(key);
+      if (existing) return existing.id;
+
+      const id = crypto.randomUUID();
+      maxCategoryOrder += 1;
+
+      await tx.insert(categories).values({
+        id,
+        userId: user.id,
+        name: trimmed,
+        parentId: null,
+        sortOrder: maxCategoryOrder,
+        isArchived: false,
+      });
+
+      categoryMap.set(key, { id, name: trimmed });
+      createdCategories.add(trimmed);
+      return id;
+    }
+
+    // Helper: get or create payee
+    async function getOrCreatePayee(
+      name: string,
+      defaultCategoryId?: string | null
+    ): Promise<string> {
+      const trimmed = name.trim();
+      const key = trimmed.toLowerCase();
+      const existing = payeeMap.get(key);
+      if (existing) {
+        if (defaultCategoryId && !existing.defaultCategoryId) {
+          await tx
+            .update(payees)
+            .set({ defaultCategoryId })
+            .where(and(eq(payees.id, existing.id), eq(payees.userId, user.id)));
+          existing.defaultCategoryId = defaultCategoryId;
+        }
+        return existing.id;
+      }
+
+      const id = crypto.randomUUID();
+      await tx.insert(payees).values({
+        id,
+        userId: user.id,
+        name: trimmed,
+        defaultCategoryId: defaultCategoryId || null,
+        priority: 1,
+      });
+
+      payeeMap.set(key, { id, name: trimmed, defaultCategoryId: defaultCategoryId || null });
+      createdPayees.add(trimmed);
+      return id;
+    }
+
     // 1. Process matched transfer pairs
     for (const pair of matchedPairs) {
       try {
-        const sourceAccountId = getOrCreateAccount(pair.outRow.accountName);
-        const destAccountId = getOrCreateAccount(pair.inRow.accountName);
+        const sourceAccountId = await getOrCreateAccount(pair.outRow.accountName);
+        const destAccountId = await getOrCreateAccount(pair.inRow.accountName);
 
         if (sourceAccountId === destAccountId) {
           runtimeErrors.push({
@@ -290,30 +296,28 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
         const destTxId = crypto.randomUUID();
 
         // Outflow from source account (amountCents is negative)
-        db.insert(transactions)
-          .values({
-            id: sourceTxId,
-            accountId: sourceAccountId,
-            amountCents: pair.outRow.amountCents,
-            date: pair.outRow.date,
-            notes: pair.outRow.notes,
-            isCleared: true,
-            transferId: destTxId,
-          })
-          .run();
+        await tx.insert(transactions).values({
+          id: sourceTxId,
+          userId: user.id,
+          accountId: sourceAccountId,
+          amountCents: pair.outRow.amountCents,
+          date: pair.outRow.date,
+          notes: pair.outRow.notes,
+          isCleared: true,
+          transferId: destTxId,
+        });
 
         // Inflow to destination account (amountCents is positive)
-        db.insert(transactions)
-          .values({
-            id: destTxId,
-            accountId: destAccountId,
-            amountCents: pair.inRow.amountCents,
-            date: pair.inRow.date,
-            notes: pair.inRow.notes || pair.outRow.notes,
-            isCleared: true,
-            transferId: sourceTxId,
-          })
-          .run();
+        await tx.insert(transactions).values({
+          id: destTxId,
+          userId: user.id,
+          accountId: destAccountId,
+          amountCents: pair.inRow.amountCents,
+          date: pair.inRow.date,
+          notes: pair.inRow.notes || pair.outRow.notes,
+          isCleared: true,
+          transferId: sourceTxId,
+        });
 
         importedTransfers += 1;
       } catch (err: unknown) {
@@ -327,8 +331,8 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
     // 2. Process any unpaired transfer rows (complete the transfer on the transfer account)
     for (const row of waitingTransfers) {
       try {
-        const accountId = getOrCreateAccount(row.accountName);
-        const counterpartAccountId = getOrCreateAccount(row.transferAccountName!);
+        const accountId = await getOrCreateAccount(row.accountName);
+        const counterpartAccountId = await getOrCreateAccount(row.transferAccountName!);
 
         if (accountId === counterpartAccountId) {
           runtimeErrors.push({
@@ -340,35 +344,29 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
 
         const thisTxId = crypto.randomUUID();
         const counterpartTxId = crypto.randomUUID();
-
-        // The sign on row.amountCents is the direction for accountName:
-        // Negative: outflow from accountName to counterpart
-        // Positive: inflow to accountName from counterpart
         const counterpartAmountCents = -row.amountCents;
 
-        db.insert(transactions)
-          .values({
-            id: thisTxId,
-            accountId,
-            amountCents: row.amountCents,
-            date: row.date,
-            notes: row.notes,
-            isCleared: true,
-            transferId: counterpartTxId,
-          })
-          .run();
+        await tx.insert(transactions).values({
+          id: thisTxId,
+          userId: user.id,
+          accountId,
+          amountCents: row.amountCents,
+          date: row.date,
+          notes: row.notes,
+          isCleared: true,
+          transferId: counterpartTxId,
+        });
 
-        db.insert(transactions)
-          .values({
-            id: counterpartTxId,
-            accountId: counterpartAccountId,
-            amountCents: counterpartAmountCents,
-            date: row.date,
-            notes: row.notes,
-            isCleared: true,
-            transferId: thisTxId,
-          })
-          .run();
+        await tx.insert(transactions).values({
+          id: counterpartTxId,
+          userId: user.id,
+          accountId: counterpartAccountId,
+          amountCents: counterpartAmountCents,
+          date: row.date,
+          notes: row.notes,
+          isCleared: true,
+          transferId: thisTxId,
+        });
 
         importedTransfers += 1;
       } catch (err: unknown) {
@@ -382,17 +380,17 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
     // 3. Process standard transactions
     for (const row of standardRows) {
       try {
-        const accountId = getOrCreateAccount(row.accountName);
+        const accountId = await getOrCreateAccount(row.accountName);
 
         let categoryId: string | null = null;
         if (row.categoryName) {
           const resolvedCategory = parseCsvCategory(row.categoryName) || row.categoryName;
-          categoryId = getOrCreateCategory(resolvedCategory);
+          categoryId = await getOrCreateCategory(resolvedCategory);
         }
 
         let payeeId: string | null = null;
         if (row.payeeName) {
-          payeeId = getOrCreatePayee(row.payeeName, categoryId);
+          payeeId = await getOrCreatePayee(row.payeeName, categoryId);
 
           // If no category was explicitly provided in the CSV, check payee rules / default category
           if (!categoryId) {
@@ -413,18 +411,17 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
           }
         }
 
-        db.insert(transactions)
-          .values({
-            id: crypto.randomUUID(),
-            accountId,
-            payeeId,
-            categoryId,
-            amountCents: row.amountCents,
-            date: row.date,
-            notes: row.notes,
-            isCleared: true,
-          })
-          .run();
+        await tx.insert(transactions).values({
+          id: crypto.randomUUID(),
+          userId: user.id,
+          accountId,
+          payeeId,
+          categoryId,
+          amountCents: row.amountCents,
+          date: row.date,
+          notes: row.notes,
+          isCleared: true,
+        });
 
         importedTransactions += 1;
       } catch (err: unknown) {
@@ -434,7 +431,7 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
         });
       }
     }
-  })();
+  });
 
   // Revalidate application cache paths
   safeRevalidatePath('/');

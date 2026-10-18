@@ -1,3 +1,4 @@
+import { requireUser } from '@/lib/auth';
 import { getCategoryTree } from '@/lib/actions/categories';
 import { getPayeesWithStats } from '@/lib/actions/payees';
 import { ManageClientView } from '@/components/ManageClientView';
@@ -12,6 +13,8 @@ interface PageProps {
 }
 
 export default async function ManagePage({ searchParams }: PageProps) {
+  await requireUser();
+
   const resolvedParams = await searchParams;
   const initialTab = resolvedParams.tab === 'payees' ? 'payees' : 'categories';
 

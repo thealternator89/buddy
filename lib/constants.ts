@@ -13,6 +13,8 @@ export const APP_CONFIG = {
   ] as const,
 };
 
+export const SESSION_COOKIE_NAME = 'buddy_session';
+
 export type AccountType = (typeof APP_CONFIG.accountTypes)[number]['value'];
 
 export const ACCOUNT_ICONS = [

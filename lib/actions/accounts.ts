@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db';
 import { accountGroups, accounts, transactions, BalanceDisplayMode } from '@/lib/db/schema';
+import { requireUser } from '@/lib/auth';
 import { AccountType } from '@/lib/constants';
 import { eq, inArray, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -29,6 +30,8 @@ export interface AccountWithBalance {
 }
 
 export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
+  const user = await requireUser();
+
   const allAccounts = await db
     .select({
       id: accounts.id,
@@ -46,8 +49,11 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       isArchived: accounts.isArchived,
     })
     .from(accounts)
-    .leftJoin(accountGroups, eq(accounts.groupId, accountGroups.id))
-    .where(eq(accounts.isArchived, false))
+    .leftJoin(
+      accountGroups,
+      and(eq(accounts.groupId, accountGroups.id), eq(accountGroups.userId, user.id))
+    )
+    .where(and(eq(accounts.userId, user.id), eq(accounts.isArchived, false)))
     .orderBy(
       sql`case when ${accounts.groupId} is null or ${accountGroups.id} is null then 1 else 0 end`,
       asc(accountGroups.sortOrder),
@@ -58,7 +64,7 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       asc(accounts.name)
     );
 
-  // Compute balance per account from transactions
+  // Compute balance per account from transactions for this user
   const balances = await db
     .select({
       accountId: transactions.accountId,
@@ -66,6 +72,7 @@ export async function getAccountsWithBalances(): Promise<AccountWithBalance[]> {
       count: sql<number>`count(${transactions.id})`,
     })
     .from(transactions)
+    .where(eq(transactions.userId, user.id))
     .groupBy(transactions.accountId);
 
   const balanceMap = new Map<string, { total: number; count: number }>();
@@ -121,49 +128,66 @@ export async function createAccount(data: {
   balanceDisplayMode?: BalanceDisplayMode;
   startingBalanceCents?: number;
 }) {
+  const user = await requireUser();
   const accountId = crypto.randomUUID();
-  const targetGroupId = data.groupId || null;
+  let targetGroupId = data.groupId || null;
+
+  if (targetGroupId) {
+    const validGroup = await db
+      .select({ id: accountGroups.id })
+      .from(accountGroups)
+      .where(and(eq(accountGroups.id, targetGroupId), eq(accountGroups.userId, user.id)))
+      .limit(1);
+    if (validGroup.length === 0) {
+      targetGroupId = null;
+    }
+  }
 
   const whereCondition = targetGroupId
-    ? and(eq(accounts.groupId, targetGroupId), eq(accounts.isArchived, false))
-    : and(isNull(accounts.groupId), eq(accounts.isArchived, false));
+    ? and(
+        eq(accounts.userId, user.id),
+        eq(accounts.groupId, targetGroupId),
+        eq(accounts.isArchived, false)
+      )
+    : and(
+        eq(accounts.userId, user.id),
+        isNull(accounts.groupId),
+        eq(accounts.isArchived, false)
+      );
 
-  const maxOrderResult = db
+  const maxOrderResult = await db
     .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
     .from(accounts)
-    .where(whereCondition)
-    .get();
+    .where(whereCondition);
 
-  const nextSortOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
+  const nextSortOrder = Number(maxOrderResult[0]?.maxOrder ?? 0) + 1;
 
-  db.insert(accounts)
-    .values({
-      id: accountId,
-      groupId: targetGroupId,
-      name: data.name.trim(),
-      type: data.type,
-      icon: data.icon || null,
-      sortOrder: nextSortOrder,
-      excludeFromNetWorth: Boolean(data.excludeFromNetWorth),
-      creditLimitCents: data.creditLimitCents !== undefined ? data.creditLimitCents : null,
-      balanceDisplayMode: data.balanceDisplayMode || 'actual',
-      isArchived: false,
-    })
-    .run();
+  await db.insert(accounts).values({
+    id: accountId,
+    userId: user.id,
+    groupId: targetGroupId,
+    name: data.name.trim(),
+    type: data.type,
+    icon: data.icon || null,
+    sortOrder: nextSortOrder,
+    excludeFromNetWorth: Boolean(data.excludeFromNetWorth),
+    creditLimitCents: data.creditLimitCents !== undefined ? data.creditLimitCents : null,
+    balanceDisplayMode: data.balanceDisplayMode || 'actual',
+    isArchived: false,
+  });
 
   // If a starting balance is provided, create the initial transaction
   if (data.startingBalanceCents && data.startingBalanceCents !== 0) {
     const today = new Date().toISOString().slice(0, 10);
-    db.insert(transactions)
-      .values({
-        id: crypto.randomUUID(),
-        accountId,
-        amountCents: data.startingBalanceCents,
-        date: today,
-        notes: 'Starting Balance',
-        isCleared: true,
-      })
-      .run();
+    await db.insert(transactions).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      accountId,
+      amountCents: data.startingBalanceCents,
+      date: today,
+      notes: 'Starting Balance',
+      isCleared: true,
+    });
   }
 
   safeRevalidatePath('/');
@@ -184,6 +208,8 @@ export async function updateAccount(
     balanceDisplayMode?: BalanceDisplayMode;
   }
 ) {
+  const user = await requireUser();
+
   const updatePayload: Partial<typeof accounts.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -197,22 +223,41 @@ export async function updateAccount(
   }
   if (data.type) updatePayload.type = data.type;
   if (data.groupId !== undefined) {
-    const current = db
+    const current = await db
       .select({ groupId: accounts.groupId })
       .from(accounts)
-      .where(eq(accounts.id, id))
-      .get();
-    const newGroupId = data.groupId || null;
-    if (current && (current.groupId || null) !== newGroupId) {
+      .where(and(eq(accounts.id, id), eq(accounts.userId, user.id)))
+      .limit(1);
+
+    let newGroupId = data.groupId || null;
+    if (newGroupId) {
+      const validGroup = await db
+        .select({ id: accountGroups.id })
+        .from(accountGroups)
+        .where(and(eq(accountGroups.id, newGroupId), eq(accountGroups.userId, user.id)))
+        .limit(1);
+      if (validGroup.length === 0) {
+        newGroupId = null;
+      }
+    }
+
+    if (current.length > 0 && (current[0].groupId || null) !== newGroupId) {
       const whereCondition = newGroupId
-        ? and(eq(accounts.groupId, newGroupId), eq(accounts.isArchived, false))
-        : and(isNull(accounts.groupId), eq(accounts.isArchived, false));
-      const maxOrder = db
+        ? and(
+            eq(accounts.userId, user.id),
+            eq(accounts.groupId, newGroupId),
+            eq(accounts.isArchived, false)
+          )
+        : and(
+            eq(accounts.userId, user.id),
+            isNull(accounts.groupId),
+            eq(accounts.isArchived, false)
+          );
+      const maxOrder = await db
         .select({ maxOrder: sql<number>`coalesce(max(${accounts.sortOrder}), 0)` })
         .from(accounts)
-        .where(whereCondition)
-        .get();
-      updatePayload.sortOrder = (maxOrder?.maxOrder ?? 0) + 1;
+        .where(whereCondition);
+      updatePayload.sortOrder = Number(maxOrder[0]?.maxOrder ?? 0) + 1;
     }
     updatePayload.groupId = newGroupId;
   }
@@ -227,7 +272,10 @@ export async function updateAccount(
     updatePayload.balanceDisplayMode = data.balanceDisplayMode;
   }
 
-  db.update(accounts).set(updatePayload).where(eq(accounts.id, id)).run();
+  await db
+    .update(accounts)
+    .set(updatePayload)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, user.id)));
 
   safeRevalidatePath('/');
   safeRevalidatePath('/accounts');
@@ -236,10 +284,12 @@ export async function updateAccount(
 }
 
 export async function archiveAccount(id: string) {
-  db.update(accounts)
+  const user = await requireUser();
+
+  await db
+    .update(accounts)
     .set({ isArchived: true, updatedAt: new Date() })
-    .where(eq(accounts.id, id))
-    .run();
+    .where(and(eq(accounts.id, id), eq(accounts.userId, user.id)));
 
   safeRevalidatePath('/');
   safeRevalidatePath('/accounts');
@@ -247,39 +297,55 @@ export async function archiveAccount(id: string) {
 }
 
 export async function deleteAccount(id: string) {
-  // Find all transactions belonging to this account
+  const user = await requireUser();
+
+  // Find all transactions belonging to this account and user
   const accountTxs = await db
     .select({ id: transactions.id, transferId: transactions.transferId })
     .from(transactions)
-    .where(eq(transactions.accountId, id));
+    .where(and(eq(transactions.accountId, id), eq(transactions.userId, user.id)));
 
   const accountTxIds = accountTxs.map((t) => t.id);
   const transferCounterpartIds = accountTxs
     .map((t) => t.transferId)
     .filter((tid): tid is string => Boolean(tid));
 
-  db.transaction((tx) => {
+  await db.transaction(async (tx) => {
     // Unlink transfers in other accounts where transferId pointed to this account's transactions
     if (accountTxIds.length > 0) {
-      tx.update(transactions)
+      await tx
+        .update(transactions)
         .set({ transferId: null, updatedAt: new Date() })
-        .where(inArray(transactions.transferId, accountTxIds))
-        .run();
+        .where(
+          and(
+            eq(transactions.userId, user.id),
+            inArray(transactions.transferId, accountTxIds)
+          )
+        );
     }
 
     // Unlink any transactions where this account's transferId pointed to them
     if (transferCounterpartIds.length > 0) {
-      tx.update(transactions)
+      await tx
+        .update(transactions)
         .set({ transferId: null, updatedAt: new Date() })
-        .where(inArray(transactions.id, transferCounterpartIds))
-        .run();
+        .where(
+          and(
+            eq(transactions.userId, user.id),
+            inArray(transactions.id, transferCounterpartIds)
+          )
+        );
     }
 
     // Delete transactions for this account
-    tx.delete(transactions).where(eq(transactions.accountId, id)).run();
+    await tx
+      .delete(transactions)
+      .where(and(eq(transactions.accountId, id), eq(transactions.userId, user.id)));
 
     // Delete the account
-    tx.delete(accounts).where(eq(accounts.id, id)).run();
+    await tx
+      .delete(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, user.id)));
   });
 
   safeRevalidatePath('/');
@@ -291,7 +357,9 @@ export async function deleteAccount(id: string) {
 export async function reorderAccounts(
   updates: { id: string; sortOrder: number; groupId?: string | null }[]
 ) {
-  db.transaction((tx) => {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
     for (const item of updates) {
       const payload: { sortOrder: number; updatedAt: Date; groupId?: string | null } = {
         sortOrder: item.sortOrder,
@@ -300,7 +368,10 @@ export async function reorderAccounts(
       if (item.groupId !== undefined) {
         payload.groupId = item.groupId;
       }
-      tx.update(accounts).set(payload).where(eq(accounts.id, item.id)).run();
+      await tx
+        .update(accounts)
+        .set(payload)
+        .where(and(eq(accounts.id, item.id), eq(accounts.userId, user.id)));
     }
   });
 

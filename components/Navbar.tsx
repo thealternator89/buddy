@@ -9,6 +9,8 @@ import {
   LayoutDashboard,
   CreditCard,
   PlusCircle,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_CONFIG } from '@/lib/constants';
@@ -17,17 +19,29 @@ import { TransactionModal } from './TransactionModal';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
+import { AuthUser } from '@/lib/auth';
+import { logoutAction } from '@/lib/actions/auth';
 
 interface NavbarProps {
+  user?: AuthUser | null;
   accounts?: AccountWithBalance[];
   categories?: (CategoryNode | CategoryFlatItem)[];
   payees?: PayeeWithRules[];
 }
 
-export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarProps) {
+export function Navbar({
+  user,
+  accounts = [],
+  categories = [],
+  payees = [],
+}: NavbarProps) {
   const pathname = usePathname();
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const isLedgerPage = pathname?.startsWith('/transactions');
+
+  if (!user || pathname === '/login' || pathname === '/signup') {
+    return null;
+  }
 
   const navItems = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
@@ -42,7 +56,10 @@ export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarPr
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo & App Name */}
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 font-bold text-xl tracking-tight text-zinc-900 dark:text-zinc-50">
+            <Link
+              href="/"
+              className="flex items-center gap-2.5 font-bold text-xl tracking-tight text-zinc-900 dark:text-zinc-50"
+            >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-500/20">
                 <Wallet className="h-5 w-5" />
               </div>
@@ -80,18 +97,39 @@ export function Navbar({ accounts = [], categories = [], payees = [] }: NavbarPr
             </nav>
           </div>
 
-          {/* Action button */}
-          {!isLedgerPage && (
-            <div className="flex items-center gap-3">
+          {/* Right side: Quick Action & User Controls */}
+          <div className="flex items-center gap-2.5">
+            {!isLedgerPage && (
               <button
                 onClick={() => setIsTxModalOpen(true)}
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-950"
               >
                 <PlusCircle className="h-4 w-4" />
-                <span>Record Transaction</span>
+                <span className="hidden sm:inline">Record Transaction</span>
               </button>
+            )}
+
+            <div className="flex items-center gap-2 pl-2 border-l border-zinc-200 dark:border-zinc-800">
+              <div
+                className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-100/80 dark:bg-zinc-900 text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                title={user.email}
+              >
+                <UserIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
+                <span className="max-w-[140px] truncate">{user.name}</span>
+              </div>
+
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  title={`Sign out (${user.email})`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50 hover:text-rose-600 transition-colors dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-rose-400"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              </form>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Mobile Navigation bar */}
