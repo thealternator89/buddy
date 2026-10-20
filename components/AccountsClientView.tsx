@@ -13,11 +13,9 @@ import { AccountIcon } from './AccountIcon';
 import { GroupIcon } from './GroupIcon';
 import {
   PlusCircle,
-  Plus,
   ArrowRight,
   Wallet,
   Pencil,
-  Trash2,
   FolderPlus,
   Layers,
   GripVertical,
@@ -360,15 +358,6 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                 <Pencil className="h-3.5 w-3.5" />
                 <span className="sr-only">Edit {account.name}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setDeletingAccount(account)}
-                className="rounded-lg p-1 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-colors"
-                title="Delete account"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span className="sr-only">Delete {account.name}</span>
-              </button>
             </div>
           </div>
 
@@ -470,30 +459,31 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
   return (
     <div className="space-y-8">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
             Accounts
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage your bank accounts, credit cards, and cash wallets. Drag and drop to reorder groups or accounts.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           <button
             onClick={() => setIsAddGroupModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 transition-colors"
+            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm font-semibold text-zinc-700 shadow-2xs hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 transition-colors"
+            title="Create new group"
           >
-            <FolderPlus className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
-            <span>New Group</span>
+            <FolderPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-500 dark:text-zinc-400 shrink-0" />
+            <span className="sm:hidden">Group</span>
+            <span className="hidden sm:inline">New Group</span>
           </button>
           <button
             onClick={() => handleOpenAddAccount(null)}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 px-2.5 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors shrink-0"
+            title="Create new account"
           >
-            <PlusCircle className="h-4 w-4" />
-            <span>New Account</span>
+            <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="sm:hidden">Account</span>
+            <span className="hidden sm:inline">New Account</span>
           </button>
         </div>
       </div>
@@ -567,27 +557,13 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2.5">
-                        <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                          {group.name}
-                        </h2>
-                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                          {groupAccounts.length} {groupAccounts.length === 1 ? 'account' : 'accounts'}
-                        </span>
-                      </div>
+                      <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                        {group.name}
+                      </h2>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAddAccount(group.id)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition-colors mr-1"
-                      title={`Add account to ${group.name}`}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Add</span>
-                    </button>
                     <button
                       type="button"
                       onClick={() => setEditingGroup(group)}
@@ -596,15 +572,6 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                     >
                       <Pencil className="h-4 w-4" />
                       <span className="sr-only">Edit group {group.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingGroup(group)}
-                      className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-colors"
-                      title="Delete group"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Delete group {group.name}</span>
                     </button>
                   </div>
                 </div>
@@ -676,26 +643,11 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                     <Layers className="h-4 w-4" />
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate">
                       Ungrouped Accounts
                     </h2>
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                      {ungroupedAccounts.length} {ungroupedAccounts.length === 1 ? 'account' : 'accounts'}
-                    </span>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenAddAccount(null)}
-                    className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
-                    title="Add ungrouped account"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add</span>
-                  </button>
                 </div>
               </div>
 
