@@ -6,7 +6,7 @@ import { getPayees } from '@/lib/actions/payees';
 import { ScheduledClientView } from '@/components/ScheduledClientView';
 
 export const metadata = {
-  title: 'Scheduled Transactions | Buddy',
+  title: 'Scheduled | Buddy',
   description: 'Manage recurring and scheduled transactions',
 };
 
