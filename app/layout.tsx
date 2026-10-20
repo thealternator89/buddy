@@ -17,6 +17,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Buddy | Transaction Tracker',
   description: 'Clean, reliable personal finance and transaction tracking',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Buddy',
+  },
 };
 
 export default async function RootLayout({
