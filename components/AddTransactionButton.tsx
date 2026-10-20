@@ -25,10 +25,12 @@ export function AddTransactionButton({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-950"
+        className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 active:bg-emerald-800 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-950 shrink-0"
+        title="Add Transaction"
       >
-        <PlusCircle className="h-4 w-4" />
-        <span>Add Transaction</span>
+        <PlusCircle className="h-4 w-4 shrink-0" />
+        <span className="sm:hidden">Add</span>
+        <span className="hidden sm:inline">Add Transaction</span>
       </button>
 
       {isOpen && (
