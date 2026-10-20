@@ -30,6 +30,7 @@ import { PayeeWithRules } from '@/lib/actions/payees';
 import { TransactionDetailModal } from './TransactionDetailModal';
 import { TableFilterDropdown, TableFilterOption } from './TableFilterDropdown';
 import { AccountCombobox } from './AccountCombobox';
+import { TransactionMobileList } from './TransactionMobileList';
 
 function getPageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 7) {
@@ -284,7 +285,7 @@ export function TransactionTable({
             onChange={handleAccountChange}
             allLabel="All Accounts"
             searchPlaceholder="Filter accounts..."
-            className="w-36 sm:w-44"
+            className="flex-1 min-w-[130px] sm:flex-none sm:w-44"
           />
 
           {/* Category Filter */}
@@ -294,7 +295,7 @@ export function TransactionTable({
             options={categoryOptions}
             onChange={handleCategoryChange}
             searchPlaceholder="Filter categories..."
-            className="w-40 sm:w-48"
+            className="flex-1 min-w-[140px] sm:flex-none sm:w-48"
           />
 
           {/* Payee Filter */}
@@ -305,7 +306,7 @@ export function TransactionTable({
               options={payeeOptions}
               onChange={handlePayeeChange}
               searchPlaceholder="Filter payees..."
-              className="w-36 sm:w-48"
+              className="flex-1 min-w-[130px] sm:flex-none sm:w-48"
             />
           )}
 
@@ -320,9 +321,21 @@ export function TransactionTable({
         </div>
       </div>
 
-      {/* Table Container */}
+      {/* Table & List Container */}
       <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="overflow-x-auto">
+        {/* Mobile List View (< 768px) */}
+        <div className="block md:hidden">
+          <TransactionMobileList
+            transactions={displayedTransactions}
+            isSpecificAccount={isSpecificAccount}
+            isPending={isPending}
+            onSelectTransaction={setSelectedTransaction}
+            onToggleCleared={handleToggleCleared}
+          />
+        </div>
+
+        {/* Desktop Table View (>= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm text-zinc-600 dark:text-zinc-400">
             <thead className="border-b border-zinc-100 bg-zinc-50/75 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
               <tr>
@@ -481,8 +494,8 @@ export function TransactionTable({
         </div>
 
         {/* Footer Summary & Pagination */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-400">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-400">
+          <div className="flex items-center justify-between sm:justify-start gap-2">
             <span>
               {totalCount === 0 ? (
                 'No transactions'
@@ -498,54 +511,84 @@ export function TransactionTable({
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex items-center gap-1 self-center sm:self-auto">
-              <button
-                type="button"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage <= 1 || isPending}
-                className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-                title="Previous Page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
+            <>
+              {/* Mobile Compact Pagination (< 640px) */}
+              <div className="flex sm:hidden items-center justify-between w-full py-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1 || isPending}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>Previous</span>
+                </button>
 
-              {pageNumbers.map((p, idx) =>
-                p === 'ellipsis' ? (
-                  <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400 select-none">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => handlePageChange(p)}
-                    disabled={isPending}
-                    className={cn(
-                      'inline-flex items-center justify-center h-8 min-w-8 px-2.5 rounded-lg text-xs font-semibold transition-colors',
-                      p === currentPage
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                    )}
-                  >
-                    {p}
-                  </button>
-                )
-              )}
+                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Page {currentPage} of {totalPages}
+                </span>
 
-              <button
-                type="button"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage >= totalPages || isPending}
-                className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-                title="Next Page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isPending}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Desktop Numbered Pagination (>= 640px) */}
+              <div className="hidden sm:flex items-center gap-1 self-center sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1 || isPending}
+                  className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {pageNumbers.map((p, idx) =>
+                  p === 'ellipsis' ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400 select-none">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handlePageChange(p)}
+                      disabled={isPending}
+                      className={cn(
+                        'inline-flex items-center justify-center h-8 min-w-8 px-2.5 rounded-lg text-xs font-semibold transition-colors',
+                        p === currentPage
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                      )}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isPending}
+                  className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white p-1.5 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+                  title="Next Page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </>
           )}
 
           {/* Totals */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-zinc-200/50 sm:border-t-0 pt-2 sm:pt-0 dark:border-zinc-800/50">
             <span>
               Page Net:{' '}
               <strong className="text-zinc-900 dark:text-zinc-100">

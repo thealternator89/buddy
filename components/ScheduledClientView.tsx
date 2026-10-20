@@ -12,6 +12,8 @@ import {
   Trash2,
   Repeat,
   ArrowLeftRight,
+  ArrowDownLeft,
+  ArrowUpRight,
   AlertCircle,
   Clock,
   Loader2,
@@ -185,9 +187,9 @@ export function ScheduledClientView({
             {isTransfer ? (
               <ArrowLeftRight className="h-4 w-4" />
             ) : isIncome ? (
-              '+'
+              <ArrowDownLeft className="h-4 w-4" />
             ) : (
-              '-'
+              <ArrowUpRight className="h-4 w-4" />
             )}
           </div>
 
@@ -356,32 +358,33 @@ export function ScheduledClientView({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Scheduled Transactions
+      {/* Top Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
+            Scheduled
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage recurring bills, income, and transfers. Create the next payment anytime with one click.
-          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setEditingItem(null);
-            setIsScheduleModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 self-start sm:self-auto rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
-        >
-          <PlusCircle className="h-4 w-4" />
-          <span>New Scheduled Transaction</span>
-        </button>
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingItem(null);
+              setIsScheduleModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 px-2.5 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors shrink-0"
+            title="Create scheduled transaction"
+          >
+            <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="sm:hidden">Add</span>
+            <span className="hidden sm:inline">Add Scheduled</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="hidden sm:grid sm:grid-cols-3 gap-4">
         <div
           className={`rounded-2xl border p-4 shadow-2xs ${
             dueCount > 0

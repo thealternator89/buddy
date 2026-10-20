@@ -49,24 +49,23 @@ export function ManageClientView({
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
             Manage
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Organize your multi-level categories, spending hierarchies, and payees in one central place.
-          </p>
         </div>
 
-        <div className="flex items-center gap-3 self-start sm:self-auto">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           {activeTab === 'categories' ? (
             <button
               onClick={() => setIsCategoryModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 px-2.5 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors shrink-0"
+              title="Add category"
             >
-              <PlusCircle className="h-4 w-4" />
-              <span>New Category</span>
+              <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">Add Category</span>
             </button>
           ) : (
             <button
@@ -74,10 +73,12 @@ export function ManageClientView({
                 setEditingPayee(null);
                 setIsPayeeModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-emerald-600 px-2.5 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 transition-colors shrink-0"
+              title="Add payee"
             >
-              <PlusCircle className="h-4 w-4" />
-              <span>New Payee</span>
+              <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">Add Payee</span>
             </button>
           )}
         </div>

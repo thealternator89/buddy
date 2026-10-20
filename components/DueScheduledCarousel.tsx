@@ -9,6 +9,8 @@ import {
   Check,
   SlidersHorizontal,
   ArrowLeftRight,
+  ArrowDownLeft,
+  ArrowUpRight,
   Repeat,
   Loader2,
   AlertCircle,
@@ -161,9 +163,9 @@ export function DueScheduledCarousel({
               {isTransfer ? (
                 <ArrowLeftRight className="h-4 w-4" />
               ) : isIncome ? (
-                '+'
+                <ArrowDownLeft className="h-4 w-4" />
               ) : (
-                '-'
+                <ArrowUpRight className="h-4 w-4" />
               )}
             </div>
 
