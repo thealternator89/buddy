@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   LayoutDashboard,
   CreditCard,
+  PieChart,
   LogOut,
   User as UserIcon,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ export function Navbar({
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/accounts', label: 'Accounts', icon: CreditCard },
     { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+    { href: '/budgets', label: 'Budgets', icon: PieChart },
     { href: '/scheduled', label: 'Scheduled', icon: CalendarClock },
     { href: '/manage', label: 'Manage', icon: SlidersHorizontal },
   ];
@@ -114,7 +116,7 @@ export function Navbar({
         </div>
 
         {/* Mobile Navigation bar */}
-        <div className="flex md:hidden border-t border-zinc-200 dark:border-zinc-800 px-4 py-2 justify-around">
+        <div className="flex md:hidden border-t border-zinc-200 dark:border-zinc-800 px-2 py-2 justify-around overflow-x-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -127,7 +129,7 @@ export function Navbar({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg',
+                  'flex flex-col items-center gap-1 py-1 px-2 text-[11px] sm:text-xs font-medium rounded-lg shrink-0',
                   isActive
                     ? 'text-emerald-600 font-semibold dark:text-emerald-400'
                     : 'text-zinc-500 dark:text-zinc-400'

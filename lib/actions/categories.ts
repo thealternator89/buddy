@@ -282,6 +282,7 @@ function revalidateAllCategoryPaths() {
   try {
     revalidatePath('/manage');
     revalidatePath('/categories');
+    revalidatePath('/budgets');
     revalidatePath('/transactions');
     revalidatePath('/accounts');
     revalidatePath('/');

@@ -14,6 +14,7 @@ import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { ScheduledTransactionWithDetails } from '@/lib/actions/scheduled-transactions';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
+import { BudgetWithStatus } from '@/lib/actions/budgets';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getLocalTodayIso, getScheduledDueStatus } from '@/lib/utils/scheduled';
 import { APP_CONFIG } from '@/lib/constants';
@@ -22,6 +23,7 @@ import { GroupIcon } from '@/components/GroupIcon';
 import { RecentTransactionsList } from '@/components/RecentTransactionsList';
 import { DueScheduledCarousel } from '@/components/DueScheduledCarousel';
 import { AddTransactionButton } from '@/components/AddTransactionButton';
+import { BudgetOverviewSection } from '@/components/BudgetOverviewSection';
 import { cn } from '@/lib/utils';
 
 interface DashboardClientViewProps {
@@ -31,6 +33,7 @@ interface DashboardClientViewProps {
   groups: AccountGroupWithStats[];
   categories: (CategoryNode | CategoryFlatItem)[];
   payees: PayeeWithRules[];
+  budgets: BudgetWithStatus[];
 }
 
 export function DashboardClientView({
@@ -40,6 +43,7 @@ export function DashboardClientView({
   groups,
   categories,
   payees,
+  budgets,
 }: DashboardClientViewProps) {
   // Mobile tab state: 'activity' (default) vs 'accounts'
   const [activeMobileTab, setActiveMobileTab] = useState<'activity' | 'accounts'>('activity');
@@ -152,6 +156,11 @@ export function DashboardClientView({
             payees={payees}
           />
         </div>
+      </div>
+
+      {/* Tablet / Desktop Budgets Overview (Appears first on md+ screens) */}
+      <div className="hidden md:block">
+        <BudgetOverviewSection budgets={budgets} variant="desktop" />
       </div>
 
       {/* Mobile Segmented Switcher (Visible only on mobile < lg) */}
@@ -295,6 +304,11 @@ export function DashboardClientView({
             />
           </div>
         </div>
+      </div>
+
+      {/* Mobile Budgets Overview (Appears at the bottom after transactions/accounts overview on mobile < md) */}
+      <div className="md:hidden">
+        <BudgetOverviewSection budgets={budgets} variant="mobile" />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { getTransactions } from '@/lib/actions/transactions';
 import { getScheduledTransactions } from '@/lib/actions/scheduled-transactions';
 import { getFlatCategories } from '@/lib/actions/categories';
 import { getPayees } from '@/lib/actions/payees';
+import { getActiveBudgetsWithStatus } from '@/lib/actions/budgets';
 import { DashboardClientView } from '@/components/DashboardClientView';
 
 export const metadata = {
@@ -14,15 +15,23 @@ export const metadata = {
 export default async function DashboardPage() {
   await requireUser();
 
-  const [accounts, recentTransactions, scheduledTransactions, groups, categories, payees] =
-    await Promise.all([
-      getAccountsWithBalances(),
-      getTransactions({ limit: 8 }),
-      getScheduledTransactions(),
-      getAccountGroups(),
-      getFlatCategories(),
-      getPayees(),
-    ]);
+  const [
+    accounts,
+    recentTransactions,
+    scheduledTransactions,
+    groups,
+    categories,
+    payees,
+    budgets,
+  ] = await Promise.all([
+    getAccountsWithBalances(),
+    getTransactions({ limit: 8 }),
+    getScheduledTransactions(),
+    getAccountGroups(),
+    getFlatCategories(),
+    getPayees(),
+    getActiveBudgetsWithStatus(),
+  ]);
 
   return (
     <DashboardClientView
@@ -32,6 +41,7 @@ export default async function DashboardPage() {
       groups={groups}
       categories={categories}
       payees={payees}
+      budgets={budgets}
     />
   );
 }
