@@ -9,6 +9,7 @@ import {
   Trash2,
   Repeat,
   Loader2,
+  Calendar,
 } from 'lucide-react';
 import {
   BudgetWithStatus,
@@ -275,7 +276,8 @@ export function BudgetsClientView({
                   <div className="mt-4 flex items-center gap-4 rounded-xl bg-zinc-50/80 p-3.5 dark:bg-zinc-800/50">
                     <CircularProgress
                       percent={budget.percentUsed}
-                      size={72}
+                      timePercent={budget.periodPercentElapsed}
+                      size={76}
                       strokeWidth={7}
                     />
 
@@ -303,8 +305,17 @@ export function BudgetsClientView({
                   </div>
                 </div>
 
-                {/* Bottom Right: Frequency Badge */}
-                <div className="mt-3.5 flex justify-end">
+                {/* Card Bottom: Days Remaining & Frequency Badge */}
+                <div className="mt-3.5 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <Calendar className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+                    <span>
+                      {budget.daysRemaining === 1
+                        ? '1 day remaining'
+                        : `${budget.daysRemaining} days remaining`}
+                    </span>
+                  </div>
+
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                     <Repeat className="h-2.5 w-2.5" />
                     {BUDGET_FREQUENCY_LABELS[budget.frequency]}

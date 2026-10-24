@@ -135,6 +135,74 @@ export function getBudgetPeriodRange(
   };
 }
 
+export interface BudgetPeriodProgress {
+  totalDays: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  percentElapsed: number; // 0 to 100
+  daysRemainingLabel: string;
+}
+
+/**
+ * Computes period progress and days remaining for a budget period:
+ * - totalDays: total number of calendar days in the period
+ * - daysElapsed: 1-based count of days elapsed through today (e.g. Day 6 of 7)
+ * - daysRemaining: calendar days remaining in the period inclusive of today (e.g. 2 days on Sat, 1 on Sun)
+ * - percentElapsed: integer 0-100 indicating percentage of period elapsed
+ * - daysRemainingLabel: human-friendly label (e.g. "5 days remaining", "1 day remaining")
+ */
+export function getBudgetPeriodProgress(
+  period: BudgetPeriodRange,
+  todayStr: string = getLocalTodayIso()
+): BudgetPeriodProgress {
+  const { year: sy, month: sm, day: sd } = parseIsoDate(period.startDate);
+  const { year: ey, month: em, day: ed } = parseIsoDate(period.endDate);
+  const { year: ty, month: tm, day: td } = parseIsoDate(todayStr);
+
+  const startUtc = Date.UTC(sy, sm - 1, sd);
+  const endUtc = Date.UTC(ey, em - 1, ed);
+  const todayUtc = Date.UTC(ty, tm - 1, td);
+
+  const totalDays = Math.max(1, Math.round((endUtc - startUtc) / 86400000) + 1);
+
+  if (todayUtc < startUtc) {
+    return {
+      totalDays,
+      daysElapsed: 0,
+      daysRemaining: totalDays,
+      percentElapsed: 0,
+      daysRemainingLabel: `${totalDays} days remaining`,
+    };
+  }
+
+  if (todayUtc > endUtc) {
+    return {
+      totalDays,
+      daysElapsed: totalDays,
+      daysRemaining: 0,
+      percentElapsed: 100,
+      daysRemainingLabel: '0 days remaining',
+    };
+  }
+
+  // today is within the budget period
+  const diffToEnd = Math.round((endUtc - todayUtc) / 86400000);
+  const daysRemaining = diffToEnd + 1; // inclusive of today
+  const daysElapsed = Math.min(totalDays, Math.max(1, totalDays - daysRemaining + 1));
+  const percentElapsed = Math.min(100, Math.max(0, Math.round((daysElapsed / totalDays) * 100)));
+
+  const daysRemainingLabel =
+    daysRemaining === 1 ? '1 day remaining' : `${daysRemaining} days remaining`;
+
+  return {
+    totalDays,
+    daysElapsed,
+    daysRemaining,
+    percentElapsed,
+    daysRemainingLabel,
+  };
+}
+
 /**
  * Converts an ISO date string (YYYY-MM-DD) into a UTC Date at 00:00:00.000Z.
  */

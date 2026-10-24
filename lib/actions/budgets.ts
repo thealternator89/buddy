@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 import {
   getBudgetPeriodRange,
+  getBudgetPeriodProgress,
   BudgetPeriodRange,
   isoDateToUtcStartOfDay,
   isoDateToUtcEndOfPreviousDay,
@@ -52,6 +53,10 @@ export interface BudgetWithStatus {
   period: BudgetPeriodRange;
   effectiveFrom: Date;
   createdAt: Date;
+  daysRemaining: number;
+  totalDays: number;
+  daysElapsed: number;
+  periodPercentElapsed: number;
 }
 
 export type BudgetUpdateMode = 'current_cycle' | 'replace_all';
@@ -265,6 +270,7 @@ export async function getActiveBudgetsWithStatus(
       const spentCents = Math.max(0, -netSignedSum);
       const remainingCents = row.amountCents - spentCents;
       const percentUsed = row.amountCents > 0 ? (spentCents / row.amountCents) * 100 : 0;
+      const progress = getBudgetPeriodProgress(period, todayStr);
 
       return {
         budgetId: row.budgetId,
@@ -281,6 +287,10 @@ export async function getActiveBudgetsWithStatus(
         period,
         effectiveFrom: row.effectiveFrom,
         createdAt: row.budgetCreatedAt,
+        daysRemaining: progress.daysRemaining,
+        totalDays: progress.totalDays,
+        daysElapsed: progress.daysElapsed,
+        periodPercentElapsed: progress.percentElapsed,
       };
     }
   );
