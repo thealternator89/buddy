@@ -134,3 +134,59 @@ export function getBudgetPeriodRange(
     label: String(year),
   };
 }
+
+/**
+ * Converts an ISO date string (YYYY-MM-DD) into a UTC Date at 00:00:00.000Z.
+ */
+export function isoDateToUtcStartOfDay(dateStr: string): Date {
+  const { year, month, day } = parseIsoDate(dateStr);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+/**
+ * Returns the ISO date string (YYYY-MM-DD) of the day immediately preceding `dateStr`.
+ */
+export function getPreviousIsoDate(dateStr: string): string {
+  const { year, month, day } = parseIsoDate(dateStr);
+  const prevUtc = new Date(Date.UTC(year, month - 1, day - 1));
+  return formatIsoDate(
+    prevUtc.getUTCFullYear(),
+    prevUtc.getUTCMonth() + 1,
+    prevUtc.getUTCDate()
+  );
+}
+
+/**
+ * Returns a UTC Date representing the end of the day immediately preceding `dateStr`
+ * (i.e. previous day at 23:59:59.999Z).
+ */
+export function isoDateToUtcEndOfPreviousDay(dateStr: string): Date {
+  const { year, month, day } = parseIsoDate(dateStr);
+  return new Date(Date.UTC(year, month - 1, day - 1, 23, 59, 59, 999));
+}
+
+/**
+ * Formats a Date object as a UTC ISO date string (YYYY-MM-DD).
+ */
+export function toUtcIsoDateString(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return formatIsoDate(
+    d.getUTCFullYear(),
+    d.getUTCMonth() + 1,
+    d.getUTCDate()
+  );
+}
+
+/**
+ * Formats an ISO date string (YYYY-MM-DD) into a human-friendly short date (e.g. "Oct 1, 2026").
+ */
+export function formatShortIsoDate(dateStr: string): string {
+  const { year, month, day } = parseIsoDate(dateStr);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return utc.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}

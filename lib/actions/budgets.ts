@@ -10,10 +10,16 @@ import {
   BudgetFrequency,
 } from '@/lib/db/schema';
 import { requireUser } from '@/lib/auth';
-import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
-import { getBudgetPeriodRange, BudgetPeriodRange } from '@/lib/utils/budget';
+import {
+  getBudgetPeriodRange,
+  BudgetPeriodRange,
+  isoDateToUtcStartOfDay,
+  isoDateToUtcEndOfPreviousDay,
+  toUtcIsoDateString,
+} from '@/lib/utils/budget';
 import { getLocalTodayIso } from '@/lib/utils/scheduled';
 
 function safeRevalidateBudgetPaths() {
@@ -48,11 +54,14 @@ export interface BudgetWithStatus {
   createdAt: Date;
 }
 
+export type BudgetUpdateMode = 'current_cycle' | 'replace_all';
+
 export interface BudgetMutationInput {
   name: string;
   frequency: BudgetFrequency;
   amountCents: number;
   categoryIds: string[];
+  updateMode?: BudgetUpdateMode;
 }
 
 /**
@@ -317,11 +326,13 @@ function validateBudgetInput(input: BudgetMutationInput) {
     frequency: input.frequency,
     amountCents,
     categoryIds: uniqueCategoryIds.sort(),
+    updateMode: input.updateMode === 'replace_all' ? 'replace_all' : ('current_cycle' as const),
   };
 }
 
 /**
- * Creates a new budget along with its initial version (versionNumber = 1).
+ * Creates a new budget along with its initial version (versionNumber = 1),
+ * effective from the start of the current budget cycle.
  */
 export async function createBudget(input: BudgetMutationInput) {
   const user = await requireUser();
@@ -340,6 +351,8 @@ export async function createBudget(input: BudgetMutationInput) {
   const budgetId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
   const now = new Date();
+  const period = getBudgetPeriodRange(validated.frequency);
+  const effectiveFrom = isoDateToUtcStartOfDay(period.startDate);
 
   await db.transaction(async (tx) => {
     await tx.insert(budgets).values({
@@ -358,7 +371,7 @@ export async function createBudget(input: BudgetMutationInput) {
       frequency: validated.frequency,
       amountCents: validated.amountCents,
       isActive: true,
-      effectiveFrom: now,
+      effectiveFrom,
       effectiveTo: null,
       createdAt: now,
     });
@@ -377,11 +390,16 @@ export async function createBudget(input: BudgetMutationInput) {
 }
 
 /**
- * Updates an existing budget:
- * - Modifying `name` updates the `budgets` record in-place without creating a new version.
- * - Modifying `frequency`, `amountCents`, or `categoryIds` deactivates the current active
- *   `budget_versions` record (`isActive = false`, `effectiveTo = now`) and inserts a new active
- *   version (`versionNumber = prev + 1`, `effectiveFrom = now`).
+ * Updates an existing budget according to `updateMode`:
+ * - `'replace_all'`: Removes all existing versions for the budget and sets the updated state
+ *   as the sole configuration (`versionNumber = 1`), effective from the start of the current cycle.
+ * - `'current_cycle'` (default): Takes effect from the start of the current cycle of the updated config.
+ *   - Deactivates the existing budget version as at the end of the previous period (`effectiveTo` =
+ *     the day immediately before the new period starts, even if that ends a partial period when
+ *     changing frequencies e.g. weekly -> monthly).
+ *   - Starts the new version from the start of the current period (`effectiveFrom` = start of new period).
+ *   - If the existing active budget version already started at (or after) the start of the current
+ *     period, it is replaced in-place rather than creating a new version.
  */
 export async function updateBudget(budgetId: string, input: BudgetMutationInput) {
   const user = await requireUser();
@@ -398,22 +416,16 @@ export async function updateBudget(budgetId: string, input: BudgetMutationInput)
   }
   const existingBudget = existingBudgetRows[0];
 
-  const activeVersionRows = await db
+  const allVersionRows = await db
     .select()
     .from(budgetVersions)
-    .where(
-      and(
-        eq(budgetVersions.budgetId, budgetId),
-        eq(budgetVersions.userId, user.id),
-        eq(budgetVersions.isActive, true)
-      )
-    )
-    .limit(1);
+    .where(and(eq(budgetVersions.budgetId, budgetId), eq(budgetVersions.userId, user.id)))
+    .orderBy(desc(budgetVersions.versionNumber));
 
-  if (activeVersionRows.length === 0) {
+  const activeVersion = allVersionRows.find((v) => v.isActive);
+  if (!activeVersion) {
     throw new Error('Active budget version not found.');
   }
-  const activeVersion = activeVersionRows[0];
 
   // Verify categories belong to user
   const validCategories = await db
@@ -441,11 +453,80 @@ export async function updateBudget(budgetId: string, input: BudgetMutationInput)
     activeVersion.amountCents !== validated.amountCents ||
     categoriesChanged;
 
+  const now = new Date();
+  const newPeriod = getBudgetPeriodRange(validated.frequency);
+  const cycleStartUtc = isoDateToUtcStartOfDay(newPeriod.startDate);
+  const prevPeriodEndUtc = isoDateToUtcEndOfPreviousDay(newPeriod.startDate);
+
+  if (validated.updateMode === 'replace_all') {
+    const hasMultipleOrHigherVersion =
+      allVersionRows.length > 1 || activeVersion.versionNumber !== 1;
+
+    if (!nameChanged && !versionFieldsChanged && !hasMultipleOrHigherVersion) {
+      return { success: true, versionCreated: false };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(budgets)
+        .set({
+          name: validated.name,
+          updatedAt: now,
+        })
+        .where(and(eq(budgets.id, budgetId), eq(budgets.userId, user.id)));
+
+      // Delete all existing versions for this budget (cascades to budgetVersionCategories)
+      await tx
+        .delete(budgetVersions)
+        .where(and(eq(budgetVersions.budgetId, budgetId), eq(budgetVersions.userId, user.id)));
+
+      // Insert single replacement version (v1)
+      const newVersionId = crypto.randomUUID();
+      await tx.insert(budgetVersions).values({
+        id: newVersionId,
+        budgetId,
+        userId: user.id,
+        versionNumber: 1,
+        frequency: validated.frequency,
+        amountCents: validated.amountCents,
+        isActive: true,
+        effectiveFrom: cycleStartUtc,
+        effectiveTo: null,
+        createdAt: now,
+      });
+
+      await tx.insert(budgetVersionCategories).values(
+        validated.categoryIds.map((categoryId) => ({
+          id: crypto.randomUUID(),
+          budgetVersionId: newVersionId,
+          categoryId,
+        }))
+      );
+    });
+
+    safeRevalidateBudgetPaths();
+    return { success: true, versionCreated: false, replacedAll: true };
+  }
+
+  // Mode: 'current_cycle'
   if (!nameChanged && !versionFieldsChanged) {
     return { success: true, versionCreated: false };
   }
 
-  const now = new Date();
+  // Check whether any existing versions started before the current cycle's start date
+  const versionsBeforeCurrentCycle = allVersionRows.filter(
+    (v) => toUtcIsoDateString(v.effectiveFrom) < newPeriod.startDate
+  );
+  const versionsOnOrAfterCurrentCycle = allVersionRows.filter(
+    (v) => toUtcIsoDateString(v.effectiveFrom) >= newPeriod.startDate
+  );
+
+  // If the active version already started on or after the start of the current period,
+  // we replace it in-place rather than deactivating it and creating a duplicate version for the same period.
+  const activeStartedInCurrentCycle =
+    toUtcIsoDateString(activeVersion.effectiveFrom) >= newPeriod.startDate;
+
+  let versionCreated = false;
 
   await db.transaction(async (tx) => {
     if (nameChanged || versionFieldsChanged) {
@@ -459,42 +540,99 @@ export async function updateBudget(budgetId: string, input: BudgetMutationInput)
     }
 
     if (versionFieldsChanged) {
-      // Deactivate current version
-      await tx
-        .update(budgetVersions)
-        .set({
-          isActive: false,
-          effectiveTo: now,
-        })
-        .where(eq(budgetVersions.id, activeVersion.id));
+      if (activeStartedInCurrentCycle) {
+        // Delete any other deactivated versions that also started on/after the current cycle start
+        const extraSameCycleIds = versionsOnOrAfterCurrentCycle
+          .filter((v) => v.id !== activeVersion.id)
+          .map((v) => v.id);
 
-      // Create new version
-      const newVersionId = crypto.randomUUID();
-      await tx.insert(budgetVersions).values({
-        id: newVersionId,
-        budgetId,
-        userId: user.id,
-        versionNumber: activeVersion.versionNumber + 1,
-        frequency: validated.frequency,
-        amountCents: validated.amountCents,
-        isActive: true,
-        effectiveFrom: now,
-        effectiveTo: null,
-        createdAt: now,
-      });
+        if (extraSameCycleIds.length > 0) {
+          await tx
+            .delete(budgetVersions)
+            .where(inArray(budgetVersions.id, extraSameCycleIds));
+        }
 
-      await tx.insert(budgetVersionCategories).values(
-        validated.categoryIds.map((categoryId) => ({
-          id: crypto.randomUUID(),
-          budgetVersionId: newVersionId,
-          categoryId,
-        }))
-      );
+        // Ensure the most recent version prior to this cycle ends right at prevPeriodEndUtc
+        const latestPriorVersion = versionsBeforeCurrentCycle[0];
+        if (latestPriorVersion) {
+          await tx
+            .update(budgetVersions)
+            .set({
+              isActive: false,
+              effectiveTo: prevPeriodEndUtc,
+            })
+            .where(eq(budgetVersions.id, latestPriorVersion.id));
+        }
+
+        const targetVersionNumber = latestPriorVersion
+          ? latestPriorVersion.versionNumber + 1
+          : 1;
+
+        // Replace the active version in-place
+        await tx
+          .update(budgetVersions)
+          .set({
+            versionNumber: targetVersionNumber,
+            frequency: validated.frequency,
+            amountCents: validated.amountCents,
+            isActive: true,
+            effectiveFrom: cycleStartUtc,
+            effectiveTo: null,
+          })
+          .where(eq(budgetVersions.id, activeVersion.id));
+
+        await tx
+          .delete(budgetVersionCategories)
+          .where(eq(budgetVersionCategories.budgetVersionId, activeVersion.id));
+
+        await tx.insert(budgetVersionCategories).values(
+          validated.categoryIds.map((categoryId) => ({
+            id: crypto.randomUUID(),
+            budgetVersionId: activeVersion.id,
+            categoryId,
+          }))
+        );
+      } else {
+        // Active version started before the current cycle:
+        // Deactivate the existing active version as at the end of the previous cycle
+        await tx
+          .update(budgetVersions)
+          .set({
+            isActive: false,
+            effectiveTo: prevPeriodEndUtc,
+          })
+          .where(eq(budgetVersions.id, activeVersion.id));
+
+        // Create new version starting from the current cycle
+        const newVersionId = crypto.randomUUID();
+        await tx.insert(budgetVersions).values({
+          id: newVersionId,
+          budgetId,
+          userId: user.id,
+          versionNumber: activeVersion.versionNumber + 1,
+          frequency: validated.frequency,
+          amountCents: validated.amountCents,
+          isActive: true,
+          effectiveFrom: cycleStartUtc,
+          effectiveTo: null,
+          createdAt: now,
+        });
+
+        await tx.insert(budgetVersionCategories).values(
+          validated.categoryIds.map((categoryId) => ({
+            id: crypto.randomUUID(),
+            budgetVersionId: newVersionId,
+            categoryId,
+          }))
+        );
+
+        versionCreated = true;
+      }
     }
   });
 
   safeRevalidateBudgetPaths();
-  return { success: true, versionCreated: versionFieldsChanged };
+  return { success: true, versionCreated };
 }
 
 /**
