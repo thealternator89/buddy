@@ -422,7 +422,7 @@ function TransactionEditForm({
                 htmlFor="modal-edit-exclude-budgets"
                 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
               >
-                Exclude from budgets
+                Exempt from budgets
               </label>
             </div>
           </div>
