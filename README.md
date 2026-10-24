@@ -12,6 +12,7 @@ Buddy gives you total control over your financial life. With multi-account track
 - 🐘 **PostgreSQL Backed**: Ready for cloud hosting or self-hosting with PostgreSQL and Drizzle ORM.
 - ⚡ **Blazing Fast**: Powered by Next.js 16 Server Components and Server Actions for fast, type-safe reads and writes.
 - 🎯 **Smart Categorization**: Set conditional amount rules on payees to automatically assign categories as you type.
+- 🎯 **Versioned Spending Budgets**: Track weekly, monthly, and yearly budgets with dual concentric progress rings and cycle-aligned versioning.
 - 🌳 **Multi-Level Categories**: Organize spending into nested category trees with automated rollup totals up the hierarchy.
 - 🔄 **Double-Entry Transfers**: Transfer funds between accounts with synchronized, linked records.
 - 📥 **Smart CSV Import**: Ingest bank statements seamlessly with automatic column normalization and entity resolution.
@@ -39,6 +40,14 @@ Buddy gives you total control over your financial life. With multi-account track
 - **Collapsible Tree View**: Expand or collapse category nodes to keep your hierarchy structured and readable.
 - **Flexible Assignment**: Assign transactions to specific granular subcategories or top-level parent categories directly.
 - **Archival Protection**: Safely archive categories without deleting historical transactions.
+
+### 🎯 Versioned Budgets & Dual Progress Tracking
+- **Flexible Budget Cycles**: Define spending targets across Weekly (Monday–Sunday), Monthly (calendar month), or Yearly (Jan 1–Dec 31) periods.
+- **Hierarchical Category Selection**: Bundle multiple categories and entire subcategory trees into a single budget with recursive net spending calculations.
+- **Dual Concentric Progress Rings**: Visual indicators showing actual spending percentage (color-coded by threshold) alongside an inner ring tracking elapsed time in the budget period.
+- **Days Remaining Pacing**: Real-time counter of days remaining in the cycle to help evaluate spending pace without subjective labels.
+- **Historical Versioning & Edit Strategies**: Protect historical reports when budget targets change. Choose to apply changes starting from the current budget cycle or cleanly replace all versions.
+- **Responsive Dashboard Overview**: Priority budget status widget on the overview dashboard sorted by highest percentage used.
 
 ### ⚡ Smart Payees & Rule-Based Auto-Categorization
 - **Priority-Based Directory**:
