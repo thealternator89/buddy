@@ -237,6 +237,7 @@ export const transactions = pgTable(
     date: text('date').notNull(), // YYYY-MM-DD
     notes: text('notes'),
     isCleared: boolean('is_cleared').notNull().default(true),
+    excludeFromBudgets: boolean('exclude_from_budgets').notNull().default(false),
     transferId: text('transfer_id'), // Paired transaction id for inter-account transfers
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -244,6 +244,7 @@ export async function getActiveBudgetsWithStatus(
           .where(
             and(
               eq(transactions.userId, user.id),
+              eq(transactions.excludeFromBudgets, false),
               inArray(transactions.categoryId, Array.from(allTargetCategoryIds)),
               gte(transactions.date, minStartDate),
               lte(transactions.date, maxEndDate)

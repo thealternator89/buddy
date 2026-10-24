@@ -415,18 +415,27 @@ export function TransactionTable({
 
                       {/* Payee / Transfer */}
                       <td className="py-3 px-3 font-medium text-zinc-900 dark:text-zinc-100">
-                        {isTransfer ? (
-                          <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-                            <ArrowLeftRight className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isTransfer ? (
+                            <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                              <ArrowLeftRight className="h-3.5 w-3.5" />
+                              <span>
+                                {isSpecificAccount
+                                  ? `Transfer: ${tx.transferAccountName || 'Account'}`
+                                  : `Transfer: ${transferDetails.sourceAccountName}`}
+                              </span>
+                            </div>
+                          ) : (
                             <span>
-                              {isSpecificAccount
-                                ? `Transfer: ${tx.transferAccountName || 'Account'}`
-                                : `Transfer: ${transferDetails.sourceAccountName}`}
+                              {tx.payeeName || <span className="text-zinc-400 italic">No Payee</span>}
                             </span>
-                          </div>
-                        ) : (
-                          tx.payeeName || <span className="text-zinc-400 italic">No Payee</span>
-                        )}
+                          )}
+                          {tx.excludeFromBudgets && (
+                            <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              Budget Exempt
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Category */}

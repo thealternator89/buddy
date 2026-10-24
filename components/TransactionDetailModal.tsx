@@ -113,6 +113,9 @@ function TransactionEditForm({
   const [date, setDate] = useState(transaction.date);
   const [notes, setNotes] = useState(transaction.notes || '');
   const [isCleared, setIsCleared] = useState(transaction.isCleared);
+  const [excludeFromBudgets, setExcludeFromBudgets] = useState(
+    Boolean(transaction.excludeFromBudgets)
+  );
   const [error, setError] = useState<string | null>(null);
 
   const applyPayeeCategory = (targetPayee: PayeeWithRules | null, amount: number) => {
@@ -158,6 +161,7 @@ function TransactionEditForm({
             date,
             notes: notes.trim() || null,
             isCleared,
+            excludeFromBudgets,
           });
           onSuccess();
         } catch (err: unknown) {
@@ -186,6 +190,7 @@ function TransactionEditForm({
             date,
             notes: notes.trim() || null,
             isCleared,
+            excludeFromBudgets,
           });
           onSuccess();
         } catch (err: unknown) {
@@ -373,8 +378,8 @@ function TransactionEditForm({
           </>
         )}
 
-        {/* Date & Cleared */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+        {/* Date & Options */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
           <div>
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
               Date
@@ -388,20 +393,38 @@ function TransactionEditForm({
             />
           </div>
 
-          <div className="pt-4 sm:pt-6 flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="modal-edit-cleared"
-              checked={isCleared}
-              onChange={(e) => setIsCleared(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
-            />
-            <label
-              htmlFor="modal-edit-cleared"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
-            >
-              Cleared transaction
-            </label>
+          <div className="pt-2 sm:pt-5 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="modal-edit-cleared"
+                checked={isCleared}
+                onChange={(e) => setIsCleared(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+              />
+              <label
+                htmlFor="modal-edit-cleared"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
+              >
+                Cleared transaction
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="modal-edit-exclude-budgets"
+                checked={excludeFromBudgets}
+                onChange={(e) => setExcludeFromBudgets(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+              />
+              <label
+                htmlFor="modal-edit-exclude-budgets"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
+              >
+                Exempt from budgets
+              </label>
+            </div>
           </div>
         </div>
 
@@ -659,7 +682,7 @@ export function TransactionDetailModal({
                 {formatCurrency(transaction.amountCents, { showSign: isIncome })}
               </div>
 
-              <div className="mt-2.5 flex items-center justify-center gap-2">
+              <div className="mt-2.5 flex items-center justify-center gap-2 flex-wrap">
                 {/* Type Badge */}
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -693,6 +716,13 @@ export function TransactionDetailModal({
                     </>
                   )}
                 </span>
+
+                {/* Budget Exempt Badge */}
+                {transaction.excludeFromBudgets && (
+                  <span className="inline-flex items-center rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
+                    Budget Exempt
+                  </span>
+                )}
               </div>
             </div>
 
