@@ -428,6 +428,7 @@ export async function importCsvTransactions(csvContent: string): Promise<CsvImpo
 
   // Revalidate application cache paths
   safeRevalidatePath('/');
+  safeRevalidatePath('/budgets');
   safeRevalidatePath('/transactions');
   safeRevalidatePath('/accounts');
   safeRevalidatePath('/categories');

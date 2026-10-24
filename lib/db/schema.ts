@@ -41,6 +41,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   payeeRules: many(payeeRules),
   transactions: many(transactions),
   scheduledTransactions: many(scheduledTransactions),
+  budgets: many(budgets),
+  budgetVersions: many(budgetVersions),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -144,6 +146,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   }),
   transactions: many(transactions),
   payeeRules: many(payeeRules),
+  budgetVersionCategories: many(budgetVersionCategories),
 }));
 
 export const payees = pgTable(
@@ -317,6 +320,95 @@ export const scheduledTransactionsRelations = relations(scheduledTransactions, (
   }),
 }));
 
+export const budgets = pgTable(
+  'budgets',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('budgets_user_id_idx').on(table.userId)]
+);
+
+export const budgetsRelations = relations(budgets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [budgets.userId],
+    references: [users.id],
+  }),
+  versions: many(budgetVersions),
+}));
+
+export const budgetVersions = pgTable(
+  'budget_versions',
+  {
+    id: text('id').primaryKey(),
+    budgetId: text('budget_id')
+      .notNull()
+      .references(() => budgets.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    versionNumber: integer('version_number').notNull().default(1),
+    frequency: text('frequency', { enum: ['weekly', 'monthly', 'yearly'] }).notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
+    effectiveTo: timestamp('effective_to', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('budget_versions_budget_id_idx').on(table.budgetId),
+    index('budget_versions_user_id_active_idx').on(table.userId, table.isActive),
+  ]
+);
+
+export const budgetVersionsRelations = relations(budgetVersions, ({ one, many }) => ({
+  budget: one(budgets, {
+    fields: [budgetVersions.budgetId],
+    references: [budgets.id],
+  }),
+  user: one(users, {
+    fields: [budgetVersions.userId],
+    references: [users.id],
+  }),
+  categories: many(budgetVersionCategories),
+}));
+
+export const budgetVersionCategories = pgTable(
+  'budget_version_categories',
+  {
+    id: text('id').primaryKey(),
+    budgetVersionId: text('budget_version_id')
+      .notNull()
+      .references(() => budgetVersions.id, { onDelete: 'cascade' }),
+    categoryId: text('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    index('budget_version_categories_version_id_idx').on(table.budgetVersionId),
+    index('budget_version_categories_category_id_idx').on(table.categoryId),
+  ]
+);
+
+export const budgetVersionCategoriesRelations = relations(
+  budgetVersionCategories,
+  ({ one }) => ({
+    budgetVersion: one(budgetVersions, {
+      fields: [budgetVersionCategories.budgetVersionId],
+      references: [budgetVersions.id],
+    }),
+    category: one(categories, {
+      fields: [budgetVersionCategories.categoryId],
+      references: [categories.id],
+    }),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -333,4 +425,11 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type ScheduledTransaction = typeof scheduledTransactions.$inferSelect;
 export type NewScheduledTransaction = typeof scheduledTransactions.$inferInsert;
+export type Budget = typeof budgets.$inferSelect;
+export type NewBudget = typeof budgets.$inferInsert;
+export type BudgetVersion = typeof budgetVersions.$inferSelect;
+export type NewBudgetVersion = typeof budgetVersions.$inferInsert;
+export type BudgetVersionCategory = typeof budgetVersionCategories.$inferSelect;
+export type NewBudgetVersionCategory = typeof budgetVersionCategories.$inferInsert;
+export type BudgetFrequency = 'weekly' | 'monthly' | 'yearly';
 export type BalanceDisplayMode = 'actual' | 'available';

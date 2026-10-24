@@ -431,6 +431,7 @@ export async function createTransaction(input: CreateTransactionInput) {
   }
 
   safeRevalidatePath('/');
+  safeRevalidatePath('/budgets');
   safeRevalidatePath('/transactions');
   safeRevalidatePath('/accounts');
   return { success: true };
@@ -534,6 +535,7 @@ export async function updateTransaction(
   }
 
   safeRevalidatePath('/');
+  safeRevalidatePath('/budgets');
   safeRevalidatePath('/transactions');
   safeRevalidatePath('/accounts');
   return { success: true };
@@ -568,6 +570,7 @@ export async function deleteTransaction(id: string) {
   }
 
   safeRevalidatePath('/');
+  safeRevalidatePath('/budgets');
   safeRevalidatePath('/transactions');
   safeRevalidatePath('/accounts');
   return { success: true };
