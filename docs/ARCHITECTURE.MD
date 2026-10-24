@@ -6,9 +6,9 @@ This document provides a deep technical overview of **Buddy**, explaining the sy
 
 ## 1. Architectural Philosophy & Overview
 
-Buddy is engineered with three primary design principles:
+Buddy is a modern, multi-user personal finance platform built for cloud deployment or self-hosted environments. It is engineered around three primary design principles:
 
-1. **Multi-User Isolation & Self-Contained Auth**: All user financial records are stored in PostgreSQL and strictly isolated per user (`user_id` foreign keys across all domain tables). Authentication uses self-contained Email & Password credentials (`crypto.scrypt`) and database-backed sessions (`sessions` table) with no external third-party auth service dependencies.
+1. **Multi-User Isolation & Self-Contained Auth**: All user financial records are stored in PostgreSQL and strictly isolated per tenant (`user_id` foreign keys across all domain tables). Authentication uses self-contained Email & Password credentials (`crypto.scrypt`) and database-backed sessions (`sessions` table) with zero external third-party auth service dependencies. Whether deployed to cloud infrastructure or self-hosted on a private server, each user maintains complete data privacy and isolation.
 2. **Server-First Execution with React Server Components (RSC)**: Buddy leverages Next.js 16's App Router architecture. High-cost database queries, category hierarchy rollups, and aggregations are computed on the server and streamed as server components, minimizing client-side JavaScript overhead.
 3. **Type-Safe Domain Logic & Server Actions**: All data mutations (CRUD operations, reordering, CSV ingestion) are implemented as Next.js Server Actions (`'use server'`) with full end-to-end TypeScript validation through Drizzle ORM and server-side `requireUser()` session enforcement.
 
@@ -31,7 +31,9 @@ Buddy is engineered with three primary design principles:
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    Domain Services & Logic                  │
 │  - Authentication & Session Engine (lib/auth.ts)            │
-│  - Category Tree Rollup Engine (lib/category-utils.ts)      │
+│  - Category Tree Rollup & Sorting (lib/category-utils.ts)   │
+│  - Budget Cycle & Pacing Engine (lib/utils/budget.ts)       │
+│  - Scheduled Recurrence Engine (lib/utils/scheduled.ts)     │
 │  - Payee Rule Evaluation Engine (lib/payee-rules.ts)        │
 │  - CSV Normalization & Parser (lib/csv.ts)                  │
 └──────────────────────────────▲──────────────────────────────┘
@@ -88,6 +90,7 @@ erDiagram
     ACCOUNT_GROUPS ||--o{ ACCOUNTS : "contains"
     ACCOUNTS ||--o{ TRANSACTIONS : "holds"
     ACCOUNTS ||--o{ SCHEDULED_TRANSACTIONS : "source of"
+    ACCOUNTS ||--o{ SCHEDULED_TRANSACTIONS : "destination of"
     CATEGORIES ||--o{ CATEGORIES : "parent of (tree)"
     CATEGORIES ||--o{ TRANSACTIONS : "classifies"
     CATEGORIES ||--o{ SCHEDULED_TRANSACTIONS : "classifies"
@@ -135,12 +138,11 @@ erDiagram
    - `is_archived` (boolean, default false)
    - `created_at`, `updated_at` (timestamptz)
 
-5. **`categories`**: Recursive self-referencing spending taxonomy.
+5. **`categories`**: Recursive self-referencing spending taxonomy (sorted alphabetically at all tree depths).
    - `id` (text, PK)
    - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `parent_id` (text, FK -> `categories.id` on delete `CASCADE`)
    - `name` (text, not null)
-   - `sort_order` (integer, default 0)
    - `is_archived` (boolean, default false)
    - `created_at` (timestamptz)
 
@@ -176,17 +178,18 @@ erDiagram
    - `transfer_id` (text, self-reference linking paired transfer record)
    - `created_at`, `updated_at` (timestamptz)
 
-9. **`scheduled_transactions`**: Recurring scheduled transaction templates.
+9. **`scheduled_transactions`**: Recurring scheduled transaction and transfer templates.
    - `id` (text, PK)
    - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `account_id` (text, FK -> `accounts.id` on delete `CASCADE`)
-   - `payee_id` (text, FK -> `payees.id` on delete `SET NULL`)
-   - `category_id` (text, FK -> `categories.id` on delete `SET NULL`)
-   - `amount_cents` (integer, signed)
-   - `frequency` (text enum: `weekly`, `fortnightly`, `monthly`, `yearly`)
+   - `transfer_account_id` (text, optional FK -> `accounts.id` on delete `CASCADE` for scheduled transfers)
+   - `payee_id` (text, optional FK -> `payees.id` on delete `SET NULL`)
+   - `category_id` (text, optional FK -> `categories.id` on delete `SET NULL`)
+   - `amount_cents` (integer, signed; negative = outflow/transfer, positive = inflow)
+   - `frequency` (text enum: `once`, `weekly`, `fortnightly`, `monthly`, `quarterly`, `yearly`)
+   - `start_date` (text, `YYYY-MM-DD`)
    - `next_due_date` (text, `YYYY-MM-DD`)
    - `notes` (text, optional)
-   - `is_active` (boolean, default true)
    - `created_at`, `updated_at` (timestamptz)
 
 10. **`budgets`**: Top-level user spending budgets.
@@ -257,6 +260,19 @@ When categories are fetched (`getCategoryTree()` in `lib/actions/categories.ts`)
 When filtering transactions by category in `TransactionTable.tsx`, selecting a parent category (e.g. `Housing`) must match all transactions categorized under `Housing` **or any descendant subcategory**.
 - The component precalculates an in-memory `categorySubtreeMap: Map<string, Set<string>>` where each category ID maps to a `Set` containing itself and all its descendant IDs.
 - Ledger filtering checks `subtreeSet.has(transaction.categoryId)` in $\mathcal{O}(1)$ time.
+
+#### Recursive Alphabetical Sorting & Flattening (`sortCategoryTree`, `flattenCategoryTree`)
+
+To maintain clean and deterministic taxonomy organization across the entire application without requiring users to maintain manual sort orders:
+1. **Schema Simplification**: The legacy `sort_order` column was dropped from the `categories` schema, eliminating manual ordering conflicts and drag-and-drop complexity across deep hierarchies.
+2. **Recursive Alphabetical Sorting**: `sortCategoryTree()` sorts root categories and recursively sorts the `children` arrays of every subtree node using case-insensitive locale comparison with ID stability:
+   ```typescript
+   node.name.localeCompare(other.name, undefined, { sensitivity: 'base' }) ||
+   node.name.localeCompare(other.name) ||
+   node.id.localeCompare(other.id)
+   ```
+   This guarantees consistent, locale-aware alphabetical placement at every level of the tree.
+3. **Alphabetical Tree Flattening**: `flattenCategoryTree()` traverses the recursively sorted tree in depth-first order to generate flat lists (`CategoryFlatItem[]`) with full path breadcrumbs (e.g. `Housing > Utilities > Internet`). This ensures all single-select (`CategoryCombobox`) and multi-select (`CategoryMultiSelect`) dropdowns, ledger filter pickers, and CSV mapping dialogs display categories alphabetically across all branches.
 
 ### 3.4 Smart Payees & Rule Matching Engine
 
@@ -372,6 +388,65 @@ When budgets are modified, historical reporting must not be rewritten. The `budg
    - **`current_cycle` (Default)**: Aligns effective dates with the start of the updated budget cycle. If the current active version was created earlier in the cycle, it closes the previous version with `effective_to = \text{endOfPreviousCycle}` (or end of previous day) and sets `effective_from = \text{startOfCurrentCycle}` on the new active version. If the active version already began within the current cycle, it updates in-place to avoid version proliferation.
    - **`replace_all`**: Clears historical versions and replaces them with a single active Version 1 record.
 
+#### Budget Exemptions & Spending Isolation
+
+Transactions can be flagged as exempt from budgets via `exclude_from_budgets` (boolean, default `false`).
+- **Domain Purpose**: Users often encounter extraordinary, non-recurring expenses (e.g. unexpected medical expenses, major appliance repairs, or reimbursable business expenses) that would distort regular periodic budget pacing. Budget exemptions allow these items to be tracked accurately in account balances and net worth without consuming periodic budget allowances.
+- **Spending Calculation**: When querying expenditures for active budgets, `getActiveBudgetsWithStatus()` in `lib/actions/budgets.ts` strictly filters by `eq(transactions.excludeFromBudgets, false)`:
+  $$\text{spentCents} = \sum_{\substack{t \in T_{\text{matched}} \\ \neg t.\text{excludeFromBudgets}}} -t.\text{amountCents}$$
+- **Transfer Synchronization**: When a transfer transaction's exemption status is modified, `updateTransaction()` in `lib/actions/transactions.ts` updates both the source outflow and destination inflow records atomically using the shared `transfer_id`.
+- **Ledger & Detail Indicators**: Transactions with `exclude_from_budgets = true` render a distinct "Budget Exempt" badge in `TransactionTable.tsx`, `TransactionMobileList.tsx`, `RecentTransactionsList.tsx`, and `TransactionDetailModal.tsx`.
+
+### 3.8 Scheduled Transactions & Recurrence Engine
+
+Buddy supports automated tracking of recurring bills, income streams, and inter-account transfers via the `scheduled_transactions` table and `lib/utils/scheduled.ts`.
+
+#### Supported Frequencies & Recurrence Intervals
+
+The recurrence engine supports six frequency tiers:
+- `once`: Single future transaction with no recurring interval.
+- `weekly`: Advances due date by $+7$ days.
+- `fortnightly`: Advances due date by $+14$ days.
+- `monthly`: Advances due date by $+1$ calendar month using clamped anchor dates.
+- `quarterly`: Advances due date by $+3$ calendar months using clamped anchor dates.
+- `yearly`: Advances due date by $+12$ calendar months (+1 year) using clamped anchor dates.
+
+#### Clamped Month Arithmetic & Anchor Day Preservation (`addMonthsClamped`)
+
+A primary challenge with calendar-month arithmetic is variable month lengths (28–31 days). Naive addition causes date drift (e.g. adding 1 month to January 31 lands on February 28, and adding another month would incorrectly land on March 28 instead of March 31).
+
+Buddy preserves the original `startDate` day as an `anchorDay`:
+1. Calculates target year and month:
+   $$\text{totalMonths} = \text{year} \times 12 + (\text{month} - 1) + \text{monthsToAdd}$$
+   $$\text{targetYear} = \lfloor \text{totalMonths} / 12 \rfloor,\quad \text{targetMonth} = (\text{totalMonths} \bmod 12) + 1$$
+2. Clamps the day to the maximum days available in `targetMonth`:
+   $$\text{finalDay} = \min(\text{anchorDay},\, \text{daysInMonth}(\text{targetYear}, \text{targetMonth}))$$
+
+This guarantees a schedule created on January 31 executes on February 28/29, and correctly recurs on March 31.
+
+#### Due Status Classification (`getScheduledDueStatus`)
+
+Every schedule's `nextDueDate` is evaluated relative to the current local date:
+$$\text{daysDiff} = \text{round}\left(\frac{\text{dueUtc} - \text{todayUtc}}{86,400,000}\right)$$
+
+| Status | Condition | Label Example | Overview Behavior |
+|---|---|---|---|
+| **`overdue`** | $\text{daysDiff} < 0$ | *"Overdue by 3 days"* | Displayed with amber/red badge in Due Carousel |
+| **`due_today`** | $\text{daysDiff} = 0$ | *"Due today"* | Highlighted in Due Carousel for immediate posting |
+| **`upcoming`** | $\text{daysDiff} > 0$ | *"Due tomorrow"*, *"In 5 days"* | Retained in `/scheduled` directory; hidden from carousel until due |
+
+#### Execution, Posting & Skipping Lifecycles
+
+1. **1-Click Posting (`postScheduledTransactionNow`)**:
+   - Creates a transaction via `createTransaction()` dated with today's local date.
+   - For scheduled transfers (`transferAccountId` is set), creates paired debit and credit records linked via `transfer_id`.
+   - Advances `nextDueDate` to `calculateNextDueDate(currentDueDate, frequency, startDate)`.
+   - If `frequency === 'once'`, `calculateNextDueDate` returns `null`, and the scheduled template is automatically deleted upon posting.
+2. **Skipping (`skipScheduledTransaction`)**:
+   - Advances `nextDueDate` to the following cycle without creating a ledger transaction. If `frequency === 'once'`, deletes the template.
+3. **Pre-Filled Adjustment**:
+   - In `DueScheduledCarousel` or the `/scheduled` view, clicking "Adjust" passes the schedule parameters to `TransactionModal` with `scheduledTransactionId`. When saved, `createTransaction` creates the transaction and advances or cleans up the schedule.
+
 ---
 
 ## 4. Deep Project Structure
@@ -452,10 +527,11 @@ buddy/
 │   │   ├── scheduled-transactions.ts    # Scheduled transaction templates and status processing
 │   │   └── transactions.ts              # Ledger queries, filters, transfer pairing, and mutations
 │   ├── db/                              # Database layer
+│   │   ├── ensure-db.ts                 # Database auto-provisioning helper on db:push
 │   │   ├── index.ts                     # PostgreSQL connection pool (postgres.js) with HMR singleton
 │   │   ├── schema.ts                    # Drizzle schema, table relations, and inferred TypeScript types
 │   │   └── seed.ts                      # Idempotent development seeder with sample user & financial data
-│   ├── category-utils.ts                # Hierarchy traversal, rollup computation, tree flattening
+│   ├── category-utils.ts                # Hierarchy traversal, rollup computation, tree flattening & sorting
 │   ├── constants.ts                     # System configuration, currency formats, account icon lists
 │   ├── csv.ts                           # PapaParse wrapper, header normalizer, date parsers
 │   ├── payee-rules.ts                   # Amount rule engine, threshold distance calculator, priority meta
@@ -469,8 +545,10 @@ buddy/
 │
 ├── docs/
 │   └── ARCHITECTURE.MD                  # Detailed technical architecture (this document)
+├── docker-compose.yml                   # Local PostgreSQL service definition
 ├── drizzle.config.ts                    # Drizzle Kit configuration pointing to PostgreSQL schema
 ├── package.json                         # Project dependencies, build targets, and scripts
+├── proxy.ts                             # Next.js 16 Proxy route protection & auth redirection
 ├── tsconfig.json                        # TypeScript configuration with `@/*` path alias
 └── README.md                            # High-level product and user-focused documentation
 ```
@@ -480,7 +558,10 @@ buddy/
 ## 5. Performance Optimizations
 
 1. **PostgreSQL Connection Pooling**: Next.js Server Actions and concurrent component renders leverage a pooled PostgreSQL client (`postgres.js`) configured with development singleton persistence across HMR reloads (`lib/db/index.ts`).
-2. **Targeted Date & Composite Indexing**: Budgets query active versions using composite indexes on `budget_versions(user_id, is_active)` and `budget_versions(budget_id)`. Transactions are indexed by user and date for fast range filtering.
-3. **Precomputed Adjacency Rollups**: Category rollups are calculated in a single linear recursive pass ($\mathcal{O}(N)$ where $N$ is total categories) rather than executing recursive SQL queries against PostgreSQL.
+2. **Targeted Date & Composite Indexing**:
+   - Budgets query active versions using composite indexes on `budget_versions(user_id, is_active)` and `budget_versions(budget_id)`.
+   - Transactions are indexed by user and date (`transactions(user_id, date)`) for fast period range queries, and by account (`transactions(user_id, account_id)`).
+   - Scheduled transactions are indexed by due date (`scheduled_transactions(user_id, next_due_date)`) for instant carousel and dashboard loading.
+3. **Precomputed Adjacency Rollups & Memoized Tree Sorting**: Category rollups are calculated in a single linear recursive pass ($\mathcal{O}(N)$ where $N$ is total categories) rather than executing recursive SQL queries against PostgreSQL. Alphabetical sorting (`sortCategoryTree`) and flattened lists (`flattenCategoryTree`) are cached in client views using `useMemo` to eliminate redundant layout computations.
 4. **In-Memory Ledger Filtering**: The transaction ledger pre-loads recent transactions on server render and executes instant client-side filtering and search in memory, avoiding server roundtrips for search queries.
 5. **Optimistic Drag-and-Drop & Transitions**: Account and group reordering and UI interactions leverage React 19 transitions (`useTransition`) and optimistic local state updates for responsive, non-blocking interactions.
