@@ -40,6 +40,7 @@ export interface TransactionWithDetails {
   date: string;
   notes: string | null;
   isCleared: boolean;
+  excludeFromBudgets: boolean;
   transferId: string | null;
   transferAccountId?: string | null;
   transferAccountName?: string | null;
@@ -160,6 +161,7 @@ export async function getPaginatedTransactions(
       date: transactions.date,
       notes: transactions.notes,
       isCleared: transactions.isCleared,
+      excludeFromBudgets: transactions.excludeFromBudgets,
       transferId: transactions.transferId,
       createdAt: transactions.createdAt,
     })
@@ -253,6 +255,7 @@ export type CreateTransactionInput =
       date: string;
       notes?: string;
       isCleared?: boolean;
+      excludeFromBudgets?: boolean;
       scheduledTransactionId?: string;
     }
   | {
@@ -263,6 +266,7 @@ export type CreateTransactionInput =
       date: string;
       notes?: string;
       isCleared?: boolean;
+      excludeFromBudgets?: boolean;
       scheduledTransactionId?: string;
     };
 
@@ -302,6 +306,7 @@ export async function createTransaction(input: CreateTransactionInput) {
         date: input.date,
         notes: input.notes || null,
         isCleared: input.isCleared ?? true,
+        excludeFromBudgets: input.excludeFromBudgets ?? false,
         transferId: destTxId,
       });
 
@@ -314,6 +319,7 @@ export async function createTransaction(input: CreateTransactionInput) {
         date: input.date,
         notes: input.notes || null,
         isCleared: input.isCleared ?? true,
+        excludeFromBudgets: input.excludeFromBudgets ?? false,
         transferId: sourceTxId,
       });
     });
@@ -380,6 +386,7 @@ export async function createTransaction(input: CreateTransactionInput) {
       date: input.date,
       notes: input.notes || null,
       isCleared: input.isCleared ?? true,
+      excludeFromBudgets: input.excludeFromBudgets ?? false,
     });
   }
 
@@ -447,6 +454,7 @@ export async function updateTransaction(
     date?: string;
     notes?: string | null;
     isCleared?: boolean;
+    excludeFromBudgets?: boolean;
     sourceAccountId?: string;
     destinationAccountId?: string;
   }
@@ -489,6 +497,7 @@ export async function updateTransaction(
           date: input.date,
           notes: cleanedNotes,
           isCleared: input.isCleared,
+          excludeFromBudgets: input.excludeFromBudgets,
           updatedAt: new Date(),
         })
         .where(and(eq(transactions.id, sourceTxId), eq(transactions.userId, user.id)));
@@ -502,6 +511,7 @@ export async function updateTransaction(
           date: input.date,
           notes: cleanedNotes,
           isCleared: input.isCleared,
+          excludeFromBudgets: input.excludeFromBudgets,
           updatedAt: new Date(),
         })
         .where(and(eq(transactions.id, destTxId), eq(transactions.userId, user.id)));
@@ -529,6 +539,7 @@ export async function updateTransaction(
         date: input.date,
         notes: cleanedNotes,
         isCleared: input.isCleared,
+        excludeFromBudgets: input.excludeFromBudgets,
         updatedAt: new Date(),
       })
       .where(and(eq(transactions.id, id), eq(transactions.userId, user.id)));

@@ -172,6 +172,7 @@ erDiagram
    - `date` (text, `YYYY-MM-DD`)
    - `notes` (text, optional)
    - `is_cleared` (boolean, default true)
+   - `exclude_from_budgets` (boolean, default false)
    - `transfer_id` (text, self-reference linking paired transfer record)
    - `created_at`, `updated_at` (timestamptz)
 
@@ -340,7 +341,7 @@ Given a reference date (`todayStr`, defaulting to the user's local ISO date), `g
 
 #### Spending Aggregation & Net Outflow (`lib/actions/budgets.ts`)
 
-For each active budget, Buddy queries all transactions occurring within the period range `[startDate, endDate]` whose category belongs to the budget's configured category list:
+For each active budget, Buddy queries all non-exempt transactions (`exclude_from_budgets = false`) occurring within the period range `[startDate, endDate]` whose category belongs to the budget's configured category list:
 - **Net Spending Calculation**: Because transactions use signed cents ($amountCents < 0$ for expenses, $> 0$ for refunds/credits), net expenditure is calculated as:
   $$\text{spentCents} = \sum_{t \in T_{\text{matched}}} -t.\text{amountCents}$$
 - **Spending Utilization**:

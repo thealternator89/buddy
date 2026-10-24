@@ -118,17 +118,24 @@ export function TransactionMobileList({
                   {/* Title and Metadata */}
                   <div className="min-w-0 space-y-1">
                     {/* Payee / Transfer */}
-                    <div
-                      className={cn(
-                        'font-semibold text-sm truncate',
-                        isTransfer
-                          ? 'text-blue-600 dark:text-blue-400'
-                          : 'text-zinc-900 dark:text-zinc-100'
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span
+                        className={cn(
+                          'font-semibold text-sm truncate',
+                          isTransfer
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-zinc-900 dark:text-zinc-100'
+                        )}
+                      >
+                        {isTransfer
+                          ? `${transferDetails.sourceAccountName} → ${transferDetails.targetAccountName}`
+                          : tx.payeeName || 'Unassigned Payee'}
+                      </span>
+                      {tx.excludeFromBudgets && (
+                        <span className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 shrink-0">
+                          Budget Exempt
+                        </span>
                       )}
-                    >
-                      {isTransfer
-                        ? `${transferDetails.sourceAccountName} → ${transferDetails.targetAccountName}`
-                        : tx.payeeName || 'Unassigned Payee'}
                     </div>
 
                     {/* Secondary: Category Badge + Account */}
