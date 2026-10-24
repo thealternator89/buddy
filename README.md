@@ -1,19 +1,21 @@
 # Buddy 💸
 
-A clean, modern, local-first personal finance and transaction tracking application built for speed, clarity, and complete privacy.
+A clean, modern, multi-user personal finance and transaction tracking application built for speed, clarity, and control.
 
-Buddy gives you total control over your financial life. With multi-account tracking, nested hierarchical categories, smart amount-based payee categorization rules, linked inter-account transfers, and bulk CSV imports, Buddy eliminates financial clutter without sending your sensitive data to third-party servers.
+Buddy gives you complete visibility and control over your financial life. Designed from the ground up as a cloud-ready, multi-user web application—with full support for self-hosting—Buddy combines multi-account tracking, nested alphabetical categories, smart payee categorization rules, scheduled recurring transactions, versioned budgets, and bulk CSV imports. With built-in authentication and strict per-user tenant isolation in PostgreSQL, Buddy eliminates financial clutter while keeping your data under your own control without relying on third-party financial aggregators.
 
 ---
 
 ## Key Highlights
 
-- 🔐 **Multi-User & Authenticated**: Built-in Email & Password authentication with database-backed sessions and strict per-user tenant isolation.
-- 🐘 **PostgreSQL Backed**: Ready for cloud hosting or self-hosting with PostgreSQL and Drizzle ORM.
-- ⚡ **Blazing Fast**: Powered by Next.js 16 Server Components and Server Actions for fast, type-safe reads and writes.
+- 🔐 **Multi-User Authentication**: Built-in Email & Password authentication with database-backed sessions and strict per-user tenant isolation.
+- 🐘 **PostgreSQL Backed**: Fully relational database powered by PostgreSQL (`postgres.js`) and Drizzle ORM, with local Docker Compose support and auto-provisioning.
+- ⚡ **Blazing Fast**: Powered by Next.js 16 Server Components and Server Actions with Proxy route protection (`proxy.ts`).
+- ⏰ **Scheduled & Recurring Transactions**: Plan recurring bills, subscriptions, transfers, and income with an overview due carousel and 1-click posting.
+- 🎯 **Versioned Spending Budgets**: Track weekly, monthly, and yearly budgets with dual concentric progress rings, days-remaining pacing, and non-destructive versioning.
+- 🛡️ **Budget Exemptions**: Flag one-off, emergency, or reimbursable transactions as exempt from budgets without excluding entire accounts from net worth.
+- 🌳 **Multi-Level Alphabetical Categories**: Organize spending into nested category trees automatically sorted alphabetically across all branches with rollup metrics.
 - 🎯 **Smart Categorization**: Set conditional amount rules on payees to automatically assign categories as you type.
-- 🎯 **Versioned Spending Budgets**: Track weekly, monthly, and yearly budgets with dual concentric progress rings and cycle-aligned versioning.
-- 🌳 **Multi-Level Categories**: Organize spending into nested category trees with automated rollup totals up the hierarchy.
 - 🔄 **Double-Entry Transfers**: Transfer funds between accounts with synchronized, linked records.
 - 📥 **Smart CSV Import**: Ingest bank statements seamlessly with automatic column normalization and entity resolution.
 
@@ -21,9 +23,18 @@ Buddy gives you total control over your financial life. With multi-account track
 
 ## Core Features
 
+### 🔐 Multi-User Authentication & Data Privacy
+- **Self-Contained Authentication**: Built-in Email & Password registration and sign-in with no external third-party identity dependencies.
+- **Strong Cryptography**: Passwords hashed with Node's native `crypto.scrypt` with a cryptographically secure 16-byte random salt and verified via constant-time comparison (`crypto.timingSafeEqual`).
+- **Database-Backed Sessions**: Session tokens hashed with SHA-256 and stored in the PostgreSQL `sessions` table, transmitted via secure `httpOnly` cookies (`buddy_session`).
+- **Proxy Route Protection**: Integrated Next.js 16 `proxy.ts` middleware protecting private application routes (`/`, `/transactions`, `/accounts`, `/manage`, `/budgets`, `/scheduled`) and redirecting unauthenticated requests to `/login`.
+- **Strict Tenant Isolation**: All domain tables (`account_groups`, `accounts`, `categories`, `payees`, `payee_rules`, `transactions`, `scheduled_transactions`, `budgets`, `budget_versions`) enforce `user_id` foreign keys with cascade deletion.
+
 ### 📊 Financial Overview & Dashboard
 - **Instant Account Balances**: Real-time snapshot of balances across all active checking, savings, credit, and cash accounts.
 - **Account Grouping**: Group accounts logically (e.g., *Everyday Banking*, *Savings & Goals*, *Credit Cards*) with aggregated totals.
+- **Due Scheduled Carousel**: Interactive carousel banner on the dashboard surfacing upcoming and overdue recurring transactions with 1-click posting or skipping.
+- **Active Budget Status**: At-a-glance budget progress cards sorted by highest spending utilization.
 - **Recent Activity Feed**: Quick glance at the latest inflow and outflow transactions.
 - **Global Quick-Record**: Record an income, expense, or transfer from anywhere in the app with a single click.
 
@@ -34,20 +45,31 @@ Buddy gives you total control over your financial life. With multi-account track
 - **Custom Icons**: Personalize accounts and groups with a curated library of icons.
 - **Account Archiving**: Hide inactive or closed accounts without breaking transaction history or category rollups.
 
-### 🌳 Multi-Tier Category Hierarchy & Rollup Analytics
-- **Unlimited Category Depth**: Create clean parent-child structures (e.g., `Housing` > `Utilities` > `Power & Electricity`).
-- **Rollup Metrics**: Real-time calculations of total spending and transaction volume that roll up from descendant subcategories to their parents.
-- **Collapsible Tree View**: Expand or collapse category nodes to keep your hierarchy structured and readable.
-- **Flexible Assignment**: Assign transactions to specific granular subcategories or top-level parent categories directly.
-- **Archival Protection**: Safely archive categories without deleting historical transactions.
+### ⏰ Scheduled & Recurring Transactions
+- **Flexible Recurrence Frequencies**: Automate recurring financial activity with support for `Weekly`, `Fortnightly (Every 2 weeks)`, `Monthly`, `Quarterly (Every 3 months)`, `Yearly`, and `One-off (Once)` schedules.
+- **Smart Recurrence Math**: Robust calendar progression handling leap years and month-end clamping (e.g. transactions anchored to the 31st clamp safely to the 28th/29th in February and re-anchor in March).
+- **Overview Due Carousel**: Surfaces due and overdue payments directly on your dashboard with contextual badges (*Due today*, *Overdue by X days*, *In X days*).
+- **1-Click Posting & Skipping**: Post transactions immediately using today's date in a single click, or skip an occurrence to advance directly to the next scheduled date.
+- **Adjustable Pre-Fill**: Click "Adjust" on any due item to open the transaction modal pre-filled with the scheduled account, payee, category, amount, and notes for modification before saving.
+- **Scheduled Transfers**: Set up recurring transfers between accounts alongside standard income and expenses.
+- **Dedicated Management Page**: Dedicated `/scheduled` view to search, review, create, edit, or delete recurring schedules.
 
 ### 🎯 Versioned Budgets & Dual Progress Tracking
 - **Flexible Budget Cycles**: Define spending targets across Weekly (Monday–Sunday), Monthly (calendar month), or Yearly (Jan 1–Dec 31) periods.
 - **Hierarchical Category Selection**: Bundle multiple categories and entire subcategory trees into a single budget with recursive net spending calculations.
-- **Dual Concentric Progress Rings**: Visual indicators showing actual spending percentage (color-coded by threshold) alongside an inner ring tracking elapsed time in the budget period.
+- **Dual Concentric Progress Rings**: Visual indicators showing actual spending percentage (color-coded green `<75%`, amber `75%–99%`, red `≥100%`) alongside an inner ring tracking elapsed time in the budget period.
 - **Days Remaining Pacing**: Real-time counter of days remaining in the cycle to help evaluate spending pace without subjective labels.
-- **Historical Versioning & Edit Strategies**: Protect historical reports when budget targets change. Choose to apply changes starting from the current budget cycle or cleanly replace all versions.
+- **Budget-Exempt Transactions**: Exclude one-off, emergency, or reimbursed transactions from budget tracking so they don't skew periodic targets.
+- **Historical Versioning & Edit Strategies**: Protect historical reports when budget targets change. Choose to apply changes starting from the current budget cycle (`current_cycle`) or cleanly replace all versions (`replace_all`).
 - **Responsive Dashboard Overview**: Priority budget status widget on the overview dashboard sorted by highest percentage used.
+
+### 🌳 Multi-Tier Category Hierarchy & Rollup Analytics
+- **Unlimited Category Depth**: Create clean parent-child structures (e.g., `Housing` > `Utilities` > `Power & Electricity`).
+- **Automatic Alphabetical Sorting Everywhere**: Categories are automatically organized alphabetically by name at the root level and within all sub-branches. Tree views, category dropdowns, comboboxes, and filter pickers maintain clean alphabetical ordering without manual sorting overhead.
+- **Rollup Metrics**: Real-time calculations of total spending and transaction volume that roll up from descendant subcategories to their parents.
+- **Collapsible Tree View**: Expand or collapse category nodes to keep your hierarchy structured and readable.
+- **Flexible Assignment**: Assign transactions to specific granular subcategories or top-level parent categories directly.
+- **Archival Protection**: Safely archive categories without deleting historical transactions.
 
 ### ⚡ Smart Payees & Rule-Based Auto-Categorization
 - **Priority-Based Directory**:
@@ -62,6 +84,7 @@ Buddy gives you total control over your financial life. With multi-account track
 ### 📒 Transactions Ledger & Linked Transfers
 - **Instant In-Memory Search**: Filter transactions instantly across payees, categories, parent categories, accounts, and notes.
 - **Multi-Dimensional Filters**: Narrow down your transactions by account, payee, date range, or category (including full category subtree matching).
+- **Exempt from Budgets**: Flag transactions as exempt from budgets when recording or editing. Paired transfer legs stay synchronized automatically, and distinct "Budget Exempt" badges are displayed across ledger rows, mobile cards, and details modals.
 - **Inter-Account Transfers**: Create synchronized transfers that automatically create paired debits and credits linked via a shared `transferId`.
 - **Reconciliation & Cleared Status**: Toggle cleared/uncleared status directly in the ledger table.
 - **Transaction Details Modal**: Inspect full transaction metadata, formatted timestamps, linked transfer partner, and quick navigation filters.
