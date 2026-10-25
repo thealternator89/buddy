@@ -10,9 +10,10 @@ import {
   Trash2,
   Repeat,
   Calendar,
-  FolderOpen,
   Star,
   GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   BudgetWithStatus,
@@ -50,6 +51,7 @@ export function BudgetsClientView({
   const [dragOverBudgetId, setDragOverBudgetId] = useState<string | null>(null);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const [groupPage, setGroupPage] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
   const [frequencyFilter, setFrequencyFilter] = useState<'all' | BudgetFrequency>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -105,7 +107,9 @@ export function BudgetsClientView({
     singles.sort((x, y) => x.sortOrder - y.sortOrder);
     const sections = Array.from(groups.values());
     for (const g of sections) {
-      g.budgets.sort((x, y) => x.sortOrder - y.sortOrder);
+      g.budgets.sort(
+        (x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime()
+      );
     }
     sections.sort(
       (x, y) => (x.budgets[0].groupSortOrder ?? 0) - (y.budgets[0].groupSortOrder ?? 0)
@@ -239,23 +243,70 @@ export function BudgetsClientView({
     resetDrag();
   };
 
-  const renderCard = (budget: BudgetWithStatus) => {
+  const renderGroupCard = (group: (typeof groupSections)[number]) => {
+    const total = group.budgets.length;
+    const starredIdx = Math.max(
+      0,
+      group.budgets.findIndex((b) => b.isOverview)
+    );
+    const index = Math.min(groupPage[group.groupId] ?? starredIdx, total - 1);
+    const setPage = (i: number) => setGroupPage((prev) => ({ ...prev, [group.groupId]: i }));
+    return renderCard(group.budgets[index], {
+      groupId: group.groupId,
+      name: group.name,
+      index,
+      total,
+      onPrev: () => setPage(index - 1),
+      onNext: () => setPage(index + 1),
+    });
+  };
+
+  const renderCard = (
+    budget: BudgetWithStatus,
+    group?: {
+      groupId: string;
+      name: string;
+      index: number;
+      total: number;
+      onPrev: () => void;
+      onNext: () => void;
+    }
+  ) => {
             const isOver = budget.spentCents > budget.amountCents;
 
             return (
               <div
-                key={budget.budgetId}
-                onDragOver={(e) => handleBudgetDragOver(e, budget)}
+                key={group ? `group-${group.groupId}` : budget.budgetId}
+                onDragOver={(e) =>
+                  group ? handleGroupDragOver(e, group.groupId) : handleBudgetDragOver(e, budget)
+                }
                 onDragLeave={() => {
-                  if (dragOverBudgetId === budget.budgetId) setDragOverBudgetId(null);
+                  if (group) {
+                    if (dragOverGroupId === group.groupId) setDragOverGroupId(null);
+                  } else if (dragOverBudgetId === budget.budgetId) {
+                    setDragOverBudgetId(null);
+                  }
                 }}
-                onDrop={(e) => handleBudgetDrop(e, budget)}
+                onDrop={(e) =>
+                  group ? handleGroupDrop(e, group.groupId) : handleBudgetDrop(e, budget)
+                }
                 className={cn(
                   'flex flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all dark:border-zinc-800 dark:bg-zinc-900',
-                  draggedBudgetId === budget.budgetId && 'opacity-40 border-dashed border-zinc-400',
-                  dragOverBudgetId === budget.budgetId &&
-                    dragType === 'budget' &&
-                    'ring-2 ring-emerald-500/80'
+                  group
+                    ? cn(
+                        draggedGroupId === group.groupId &&
+                          'opacity-40 border-dashed border-zinc-400',
+                        dragOverGroupId === group.groupId &&
+                          dragType === 'group' &&
+                          'ring-2 ring-emerald-500/80'
+                      )
+                    : cn(
+                        draggedBudgetId === budget.budgetId &&
+                          'opacity-40 border-dashed border-zinc-400',
+                        dragOverBudgetId === budget.budgetId &&
+                          dragType === 'budget' &&
+                          'ring-2 ring-emerald-500/80'
+                      )
                 )}
               >
                 <div>
@@ -265,20 +316,49 @@ export function BudgetsClientView({
                       {canReorder && (
                         <div
                           draggable
-                          onDragStart={(e) => handleBudgetDragStart(e, budget.budgetId)}
+                          onDragStart={(e) =>
+                            group
+                              ? handleGroupDragStart(e, group.groupId)
+                              : handleBudgetDragStart(e, budget.budgetId)
+                          }
                           onDragEnd={resetDrag}
                           className="shrink-0 cursor-grab rounded p-0.5 text-zinc-300 hover:text-zinc-500 active:cursor-grabbing dark:text-zinc-600 dark:hover:text-zinc-400"
-                          title="Drag to reorder"
+                          title={group ? 'Drag to reorder group' : 'Drag to reorder'}
                         >
                           <GripVertical className="h-4 w-4" />
                         </div>
                       )}
                       <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                        {budget.name}
+                        {group ? group.name : budget.name}
                       </h3>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
+                      {group && group.total > 1 && (
+                        <div className="mr-1 flex items-center gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                          <button
+                            type="button"
+                            onClick={group.onPrev}
+                            disabled={group.index === 0}
+                            aria-label="Previous budget"
+                            className="rounded p-1 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-zinc-800"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <span className="tabular-nums">
+                            {group.index + 1}/{group.total}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={group.onNext}
+                            disabled={group.index === group.total - 1}
+                            aria-label="Next budget"
+                            className="rounded p-1 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-zinc-800"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                       {budget.groupId && (
                         <button
                           type="button"
@@ -526,53 +606,20 @@ export function BudgetsClientView({
           )}
         </div>
       ) : (
-        <div className="space-y-5 sm:space-y-6">
+        <div className="space-y-4 sm:space-y-5">
+          {groupSections.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {groupSections.map((group) => renderGroupCard(group))}
+            </div>
+          )}
+          {groupSections.length > 0 && singleBudgets.length > 0 && (
+            <hr className="border-t border-zinc-200 dark:border-zinc-800" />
+          )}
           {singleBudgets.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
               {singleBudgets.map((budget) => renderCard(budget))}
             </div>
           )}
-          {groupSections.map((group) => (
-            <section
-              key={group.groupId}
-              onDragOver={(e) => handleGroupDragOver(e, group.groupId)}
-              onDragLeave={() => {
-                if (dragOverGroupId === group.groupId) setDragOverGroupId(null);
-              }}
-              onDrop={(e) => handleGroupDrop(e, group.groupId)}
-              className={cn(
-                'rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/40',
-                draggedGroupId === group.groupId && 'opacity-40 border-dashed border-zinc-400',
-                dragOverGroupId === group.groupId &&
-                  dragType === 'group' &&
-                  'ring-2 ring-emerald-500/80'
-              )}
-            >
-              <div className="mb-3 flex items-center gap-2">
-                {canReorder && (
-                  <div
-                    draggable
-                    onDragStart={(e) => handleGroupDragStart(e, group.groupId)}
-                    onDragEnd={resetDrag}
-                    className="shrink-0 cursor-grab rounded p-0.5 text-zinc-300 hover:text-zinc-500 active:cursor-grabbing dark:text-zinc-600 dark:hover:text-zinc-400"
-                    title="Drag to reorder group"
-                  >
-                    <GripVertical className="h-4 w-4" />
-                  </div>
-                )}
-                <FolderOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                  {group.name}
-                </h2>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {group.budgets.length} {group.budgets.length === 1 ? 'budget' : 'budgets'}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-                {group.budgets.map((budget) => renderCard(budget))}
-              </div>
-            </section>
-          ))}
         </div>
       )}
 
