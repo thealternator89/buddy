@@ -3,6 +3,7 @@
 import { db } from '@/lib/db';
 import {
   budgets,
+  budgetGroups,
   budgetVersions,
   budgetVersionCategories,
   categories,
@@ -10,7 +11,7 @@ import {
   BudgetFrequency,
 } from '@/lib/db/schema';
 import { requireUser } from '@/lib/auth';
-import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 import {
@@ -43,6 +44,13 @@ export interface BudgetWithStatus {
   versionId: string;
   versionNumber: number;
   name: string;
+  groupId: string | null;
+  groupName: string | null;
+  groupSortOrder: number | null;
+  /** Position among budgets in the same container (ungrouped list or group). */
+  sortOrder: number;
+  /** Effective flag: true for the one budget in a group shown on the overview page. */
+  isOverview: boolean;
   frequency: BudgetFrequency;
   amountCents: number;
   spentCents: number;
@@ -67,6 +75,8 @@ export interface BudgetMutationInput {
   amountCents: number;
   categoryIds: string[];
   updateMode?: BudgetUpdateMode;
+  /** Group name; empty/null removes the budget from any group, undefined leaves it unchanged. */
+  groupName?: string | null;
 }
 
 /**
@@ -136,6 +146,11 @@ export async function getActiveBudgetsWithStatus(
       budgetId: budgets.id,
       name: budgets.name,
       budgetCreatedAt: budgets.createdAt,
+      groupId: budgets.groupId,
+      groupName: budgetGroups.name,
+      groupSortOrder: budgetGroups.sortOrder,
+      sortOrder: budgets.sortOrder,
+      budgetIsOverview: budgets.isOverview,
       versionId: budgetVersions.id,
       versionNumber: budgetVersions.versionNumber,
       frequency: budgetVersions.frequency,
@@ -144,6 +159,7 @@ export async function getActiveBudgetsWithStatus(
     })
     .from(budgetVersions)
     .innerJoin(budgets, eq(budgetVersions.budgetId, budgets.id))
+    .leftJoin(budgetGroups, eq(budgets.groupId, budgetGroups.id))
     .where(and(eq(budgetVersions.userId, user.id), eq(budgetVersions.isActive, true)));
 
   if (activeRows.length === 0) {
@@ -278,6 +294,11 @@ export async function getActiveBudgetsWithStatus(
         versionId: row.versionId,
         versionNumber: row.versionNumber,
         name: row.name,
+        groupId: row.groupId,
+        groupName: row.groupName,
+        groupSortOrder: row.groupSortOrder,
+        sortOrder: row.sortOrder,
+        isOverview: false, // resolved below once all budgets are known
         frequency: row.frequency,
         amountCents: row.amountCents,
         spentCents,
@@ -295,6 +316,23 @@ export async function getActiveBudgetsWithStatus(
       };
     }
   );
+
+  // Resolve the effective overview budget per group: the flagged budget, otherwise the
+  // earliest-created member.
+  const flaggedByBudgetId = new Map(activeRows.map((r) => [r.budgetId, r.budgetIsOverview]));
+  const membersByGroup = new Map<string, BudgetWithStatus[]>();
+  for (const r of results) {
+    if (!r.groupId) continue;
+    const list = membersByGroup.get(r.groupId) || [];
+    list.push(r);
+    membersByGroup.set(r.groupId, list);
+  }
+  for (const members of membersByGroup.values()) {
+    const chosen =
+      members.find((m) => flaggedByBudgetId.get(m.budgetId)) ||
+      [...members].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+    chosen.isOverview = true;
+  }
 
   // Sort by highest budget % used first
   results.sort((a, b) => {
@@ -341,6 +379,116 @@ function validateBudgetInput(input: BudgetMutationInput) {
   };
 }
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Finds (case-insensitively) or creates the user's budget group with the given name.
+ * Returns null for an empty name (i.e. ungrouped).
+ */
+async function resolveGroupId(
+  tx: DbTransaction,
+  userId: string,
+  groupName: string | null | undefined
+): Promise<string | null> {
+  const name = (groupName ?? '').trim();
+  if (!name) return null;
+
+  const existing = await tx
+    .select({ id: budgetGroups.id })
+    .from(budgetGroups)
+    .where(
+      and(eq(budgetGroups.userId, userId), sql`lower(${budgetGroups.name}) = lower(${name})`)
+    )
+    .limit(1);
+  if (existing.length > 0) return existing[0].id;
+
+  const maxRows = await tx
+    .select({ maxOrder: sql<number>`coalesce(max(${budgetGroups.sortOrder}), 0)` })
+    .from(budgetGroups)
+    .where(eq(budgetGroups.userId, userId));
+
+  const id = crypto.randomUUID();
+  await tx
+    .insert(budgetGroups)
+    .values({ id, userId, name, sortOrder: Number(maxRows[0]?.maxOrder ?? 0) + 1 });
+  return id;
+}
+
+/** Next sortOrder for appending a budget to the end of a container (a group, or ungrouped). */
+async function nextBudgetSortOrder(
+  tx: DbTransaction,
+  userId: string,
+  groupId: string | null,
+  excludeBudgetId?: string
+) {
+  const rows = await tx
+    .select({ maxOrder: sql<number>`coalesce(max(${budgets.sortOrder}), 0)` })
+    .from(budgets)
+    .where(
+      and(
+        eq(budgets.userId, userId),
+        groupId ? eq(budgets.groupId, groupId) : isNull(budgets.groupId),
+        excludeBudgetId ? ne(budgets.id, excludeBudgetId) : undefined
+      )
+    );
+  return Number(rows[0]?.maxOrder ?? 0) + 1;
+}
+
+async function countGroupMembers(
+  tx: DbTransaction,
+  userId: string,
+  groupId: string,
+  excludeBudgetId?: string
+) {
+  const rows = await tx
+    .select({ id: budgets.id })
+    .from(budgets)
+    .where(
+      and(
+        eq(budgets.userId, userId),
+        eq(budgets.groupId, groupId),
+        excludeBudgetId ? ne(budgets.id, excludeBudgetId) : undefined
+      )
+    );
+  return rows.length;
+}
+
+async function deleteGroupIfEmpty(tx: DbTransaction, userId: string, groupId: string | null) {
+  if (!groupId) return;
+  if ((await countGroupMembers(tx, userId, groupId)) === 0) {
+    await tx
+      .delete(budgetGroups)
+      .where(and(eq(budgetGroups.id, groupId), eq(budgetGroups.userId, userId)));
+  }
+}
+
+/**
+ * Moves a budget into a group (or out of all groups when `newGroupId` is null). A budget that
+ * joins an empty group becomes its overview budget; the previous group is removed if emptied.
+ */
+async function moveBudgetToGroup(
+  tx: DbTransaction,
+  userId: string,
+  budgetId: string,
+  oldGroupId: string | null,
+  newGroupId: string | null
+) {
+  const becomesOverview =
+    newGroupId !== null && (await countGroupMembers(tx, userId, newGroupId, budgetId)) === 0;
+
+  await tx
+    .update(budgets)
+    .set({
+      groupId: newGroupId,
+      isOverview: becomesOverview,
+      sortOrder: await nextBudgetSortOrder(tx, userId, newGroupId, budgetId),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)));
+
+  await deleteGroupIfEmpty(tx, userId, oldGroupId);
+}
+
 /**
  * Creates a new budget along with its initial version (versionNumber = 1),
  * effective from the start of the current budget cycle.
@@ -366,10 +514,18 @@ export async function createBudget(input: BudgetMutationInput) {
   const effectiveFrom = isoDateToUtcStartOfDay(period.startDate);
 
   await db.transaction(async (tx) => {
+    const groupId = await resolveGroupId(tx, user.id, input.groupName);
+    const isOverview =
+      groupId !== null && (await countGroupMembers(tx, user.id, groupId)) === 0;
+    const sortOrder = await nextBudgetSortOrder(tx, user.id, groupId);
+
     await tx.insert(budgets).values({
       id: budgetId,
       userId: user.id,
       name: validated.name,
+      groupId,
+      isOverview,
+      sortOrder,
       createdAt: now,
       updatedAt: now,
     });
@@ -446,6 +602,17 @@ export async function updateBudget(budgetId: string, input: BudgetMutationInput)
 
   if (validCategories.length !== validated.categoryIds.length) {
     throw new Error('One or more selected categories do not exist.');
+  }
+
+  // Group changes are independent of versioning, so apply them first.
+  if (input.groupName !== undefined) {
+    await db.transaction(async (tx) => {
+      const newGroupId = await resolveGroupId(tx, user.id, input.groupName);
+      if (newGroupId !== existingBudget.groupId) {
+        await moveBudgetToGroup(tx, user.id, budgetId, existingBudget.groupId, newGroupId);
+      }
+    });
+    safeRevalidateBudgetPaths();
   }
 
   const currentVersionCats = await db
@@ -669,10 +836,94 @@ export async function deactivateBudget(budgetId: string) {
         )
       );
 
+    const existing = await tx
+      .select({ groupId: budgets.groupId })
+      .from(budgets)
+      .where(and(eq(budgets.id, budgetId), eq(budgets.userId, user.id)))
+      .limit(1);
+
     await tx
       .update(budgets)
-      .set({ updatedAt: now })
+      .set({ updatedAt: now, groupId: null, isOverview: false })
       .where(and(eq(budgets.id, budgetId), eq(budgets.userId, user.id)));
+
+    // Leaving the group; remove it if empty (remaining members fall back to the default overview budget).
+    await deleteGroupIfEmpty(tx, user.id, existing[0]?.groupId ?? null);
+  });
+
+  safeRevalidateBudgetPaths();
+  return { success: true };
+}
+
+/**
+ * Marks a grouped budget as the one shown on the overview page for its group.
+ */
+export async function setOverviewBudget(budgetId: string) {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ groupId: budgets.groupId })
+      .from(budgets)
+      .where(and(eq(budgets.id, budgetId), eq(budgets.userId, user.id)))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new Error('Budget not found.');
+    }
+    const groupId = rows[0].groupId;
+    if (!groupId) {
+      throw new Error('Budget is not in a group.');
+    }
+
+    await tx
+      .update(budgets)
+      .set({ isOverview: false })
+      .where(and(eq(budgets.groupId, groupId), eq(budgets.userId, user.id)));
+
+    await tx
+      .update(budgets)
+      .set({ isOverview: true, updatedAt: new Date() })
+      .where(and(eq(budgets.id, budgetId), eq(budgets.userId, user.id)));
+  });
+
+  safeRevalidateBudgetPaths();
+  return { success: true };
+}
+
+/**
+ * Persists a custom ordering of budgets within one container (ungrouped list or a group).
+ * `orderedBudgetIds` is the full container in its new order.
+ */
+export async function reorderBudgets(orderedBudgetIds: string[]) {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedBudgetIds.length; i++) {
+      await tx
+        .update(budgets)
+        .set({ sortOrder: i + 1 })
+        .where(and(eq(budgets.id, orderedBudgetIds[i]), eq(budgets.userId, user.id)));
+    }
+  });
+
+  safeRevalidateBudgetPaths();
+  return { success: true };
+}
+
+/**
+ * Persists a custom ordering of budget groups.
+ */
+export async function reorderBudgetGroups(orderedGroupIds: string[]) {
+  const user = await requireUser();
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedGroupIds.length; i++) {
+      await tx
+        .update(budgetGroups)
+        .set({ sortOrder: i + 1 })
+        .where(and(eq(budgetGroups.id, orderedGroupIds[i]), eq(budgetGroups.userId, user.id)));
+    }
   });
 
   safeRevalidateBudgetPaths();

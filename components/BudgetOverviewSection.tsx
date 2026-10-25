@@ -56,9 +56,9 @@ export function BudgetOverviewSection({
       <div className="w-full min-w-0 mb-2">
         <div
           className="text-xs sm:text-sm font-bold text-zinc-900 group-hover:text-emerald-600 transition-colors truncate dark:text-zinc-100 dark:group-hover:text-emerald-400"
-          title={budget.name}
+          title={budget.groupName ?? budget.name}
         >
-          {budget.name}
+          {budget.groupName ?? budget.name}
         </div>
         <div className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
           {BUDGET_FREQUENCY_LABELS[budget.frequency]}

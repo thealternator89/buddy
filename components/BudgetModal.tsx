@@ -26,6 +26,7 @@ interface BudgetModalProps {
   onClose: () => void;
   categories: (CategoryNode | CategoryFlatItem)[];
   editingBudget?: BudgetWithStatus | null;
+  groupNames?: string[];
 }
 
 export function BudgetModal({
@@ -33,6 +34,7 @@ export function BudgetModal({
   onClose,
   categories,
   editingBudget,
+  groupNames = [],
 }: BudgetModalProps) {
   const isEditing = Boolean(editingBudget);
 
@@ -46,6 +48,7 @@ export function BudgetModal({
   const [amountCents, setAmountCents] = useState<number>(
     editingBudget?.amountCents || 0
   );
+  const [groupName, setGroupName] = useState(editingBudget?.groupName || '');
   const [updateMode, setUpdateMode] = useState<BudgetUpdateMode>('current_cycle');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -89,6 +92,7 @@ export function BudgetModal({
             amountCents,
             categoryIds,
             updateMode,
+            groupName: groupName.trim() || null,
           });
         } else {
           await createBudget({
@@ -96,6 +100,7 @@ export function BudgetModal({
             frequency,
             amountCents,
             categoryIds,
+            groupName: groupName.trim() || null,
           });
         }
         onClose();
@@ -226,6 +231,33 @@ export function BudgetModal({
               placeholder="0.00"
               required
             />
+          </div>
+
+          {/* Group */}
+          <div>
+            <label
+              htmlFor="budget-group"
+              className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5"
+            >
+              Group <span className="font-normal normal-case tracking-normal">(optional)</span>
+            </label>
+            <input
+              id="budget-group"
+              type="text"
+              list="budget-group-names"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="e.g. Groceries"
+              className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-xs focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+            <datalist id="budget-group-names">
+              {groupNames.map((g) => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
+            <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+              Group budgets of different periods together. Only one budget per group shows on the overview.
+            </p>
           </div>
 
           {/* Versioning Options when editing */}

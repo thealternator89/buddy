@@ -6,6 +6,7 @@ import { getScheduledTransactions } from '@/lib/actions/scheduled-transactions';
 import { getFlatCategories } from '@/lib/actions/categories';
 import { getPayees } from '@/lib/actions/payees';
 import { getActiveBudgetsWithStatus } from '@/lib/actions/budgets';
+import { getOverviewBudgets } from '@/lib/utils/budget';
 import { DashboardClientView } from '@/components/DashboardClientView';
 
 export const metadata = {
@@ -41,7 +42,7 @@ export default async function DashboardPage() {
       groups={groups}
       categories={categories}
       payees={payees}
-      budgets={budgets}
+      budgets={getOverviewBudgets(budgets)}
     />
   );
 }

@@ -258,3 +258,13 @@ export function formatShortIsoDate(dateStr: string): string {
     year: 'numeric',
   });
 }
+
+/**
+ * Budgets that should appear on the overview page: all ungrouped budgets, plus the
+ * single overview budget of each group.
+ */
+export function getOverviewBudgets<T extends { groupId: string | null; isOverview: boolean }>(
+  budgets: T[]
+): T[] {
+  return budgets.filter((b) => b.groupId === null || b.isOverview);
+}
