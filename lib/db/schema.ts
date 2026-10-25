@@ -321,6 +321,20 @@ export const scheduledTransactionsRelations = relations(scheduledTransactions, (
   }),
 }));
 
+export const budgetGroups = pgTable(
+  'budget_groups',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('budget_groups_user_id_idx').on(table.userId)]
+);
+
 export const budgets = pgTable(
   'budgets',
   {
@@ -329,16 +343,31 @@ export const budgets = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    groupId: text('group_id').references(() => budgetGroups.id, { onDelete: 'set null' }),
+    isOverview: boolean('is_overview').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('budgets_user_id_idx').on(table.userId)]
 );
 
+export const budgetGroupsRelations = relations(budgetGroups, ({ one, many }) => ({
+  user: one(users, {
+    fields: [budgetGroups.userId],
+    references: [users.id],
+  }),
+  budgets: many(budgets),
+}));
+
 export const budgetsRelations = relations(budgets, ({ one, many }) => ({
   user: one(users, {
     fields: [budgets.userId],
     references: [users.id],
+  }),
+  group: one(budgetGroups, {
+    fields: [budgets.groupId],
+    references: [budgetGroups.id],
   }),
   versions: many(budgetVersions),
 }));
