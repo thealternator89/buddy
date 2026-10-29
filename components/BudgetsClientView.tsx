@@ -23,7 +23,13 @@ import {
 } from '@/lib/actions/budgets';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { formatCurrency } from '@/lib/utils/currency';
-import { BUDGET_FREQUENCY_LABELS, BudgetFrequency } from '@/lib/utils/budget';
+import {
+  BUDGET_FREQUENCY_LABELS,
+  BudgetFrequency,
+  getBudgetPeriodRange,
+  getBudgetPeriodProgress,
+} from '@/lib/utils/budget';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { CircularProgress } from './CircularProgress';
 import { BudgetModal } from './BudgetModal';
 import { DeleteBudgetModal } from './DeleteBudgetModal';
@@ -58,10 +64,26 @@ export function BudgetsClientView({
   const [editingBudget, setEditingBudget] = useState<BudgetWithStatus | null>(null);
   const [deletingBudget, setDeletingBudget] = useState<BudgetWithStatus | null>(null);
   const [, startTransition] = useTransition();
+  const todayStr = useBrowserTodayIso();
+
+  const localizedBudgets = useMemo(() => {
+    return budgets.map((b) => {
+      const period = getBudgetPeriodRange(b.frequency, todayStr);
+      const progress = getBudgetPeriodProgress(period, todayStr);
+      return {
+        ...b,
+        period,
+        daysRemaining: progress.daysRemaining,
+        totalDays: progress.totalDays,
+        daysElapsed: progress.daysElapsed,
+        periodPercentElapsed: progress.percentElapsed,
+      };
+    });
+  }, [budgets, todayStr]);
 
   const filteredBudgets = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return budgets.filter((b) => {
+    return localizedBudgets.filter((b) => {
       if (frequencyFilter !== 'all' && b.frequency !== frequencyFilter) {
         return false;
       }
@@ -75,7 +97,7 @@ export function BudgetsClientView({
       );
       return nameMatch || catMatch;
     });
-  }, [budgets, search, frequencyFilter]);
+  }, [localizedBudgets, search, frequencyFilter]);
 
   const overBudgetCount = useMemo(
     () => budgets.filter((b) => b.spentCents > b.amountCents).length,

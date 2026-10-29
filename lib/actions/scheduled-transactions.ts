@@ -14,9 +14,9 @@ import { createTransaction } from './transactions';
 import { resolvePayeeCategory, RuleOperator } from '@/lib/payee-rules';
 import {
   calculateNextDueDate,
-  getLocalTodayIso,
   ScheduledFrequency,
 } from '@/lib/utils/scheduled';
+import { getServerTodayIso } from '@/lib/server-timezone';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { revalidatePath } from 'next/cache';
@@ -398,7 +398,7 @@ export async function postScheduledTransactionNow(id: string, clientTodayDate?: 
   }
 
   const sched = items[0];
-  const txDate = clientTodayDate || getLocalTodayIso();
+  const txDate = clientTodayDate || (await getServerTodayIso());
 
   if (sched.transferAccountId) {
     await createTransaction({

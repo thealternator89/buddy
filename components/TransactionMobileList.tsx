@@ -13,6 +13,7 @@ import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getTransferDetails } from '@/lib/utils/transaction';
 import { groupTransactionsByDate } from '@/lib/utils/date';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { cn } from '@/lib/utils';
 
 interface TransactionMobileListProps {
@@ -30,9 +31,11 @@ export function TransactionMobileList({
   onSelectTransaction,
   onToggleCleared,
 }: TransactionMobileListProps) {
+  const todayStr = useBrowserTodayIso();
+
   const groupedTransactions = useMemo(
-    () => groupTransactionsByDate(transactions),
-    [transactions]
+    () => groupTransactionsByDate(transactions, todayStr),
+    [transactions, todayStr]
   );
 
   if (transactions.length === 0) {

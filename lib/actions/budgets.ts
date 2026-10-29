@@ -22,7 +22,7 @@ import {
   isoDateToUtcEndOfPreviousDay,
   toUtcIsoDateString,
 } from '@/lib/utils/budget';
-import { getLocalTodayIso } from '@/lib/utils/scheduled';
+import { getServerTodayIso } from '@/lib/server-timezone';
 
 function safeRevalidateBudgetPaths() {
   try {
@@ -77,6 +77,8 @@ export interface BudgetMutationInput {
   updateMode?: BudgetUpdateMode;
   /** Group name; empty/null removes the budget from any group, undefined leaves it unchanged. */
   groupName?: string | null;
+  /** Today's ISO date (YYYY-MM-DD) in the user's browser timezone. */
+  clientTodayDate?: string;
 }
 
 /**
@@ -137,9 +139,10 @@ function buildCategoryHierarchyMaps(
  * highest percentage of budget used first.
  */
 export async function getActiveBudgetsWithStatus(
-  todayStr: string = getLocalTodayIso()
+  todayStr?: string
 ): Promise<BudgetWithStatus[]> {
   const user = await requireUser();
+  const effectiveTodayStr = todayStr ?? (await getServerTodayIso());
 
   const activeRows = await db
     .select({
@@ -203,7 +206,7 @@ export async function getActiveBudgetsWithStatus(
   const allTargetCategoryIds = new Set<string>();
 
   const preparedBudgets = activeRows.map((row) => {
-    const period = getBudgetPeriodRange(row.frequency, todayStr);
+    const period = getBudgetPeriodRange(row.frequency, effectiveTodayStr);
     if (!minStartDate || period.startDate < minStartDate) {
       minStartDate = period.startDate;
     }
@@ -287,7 +290,7 @@ export async function getActiveBudgetsWithStatus(
       const spentCents = Math.max(0, -netSignedSum);
       const remainingCents = row.amountCents - spentCents;
       const percentUsed = row.amountCents > 0 ? (spentCents / row.amountCents) * 100 : 0;
-      const progress = getBudgetPeriodProgress(period, todayStr);
+      const progress = getBudgetPeriodProgress(period, effectiveTodayStr);
 
       return {
         budgetId: row.budgetId,
@@ -510,7 +513,8 @@ export async function createBudget(input: BudgetMutationInput) {
   const budgetId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
   const now = new Date();
-  const period = getBudgetPeriodRange(validated.frequency);
+  const todayStr = input.clientTodayDate ?? (await getServerTodayIso());
+  const period = getBudgetPeriodRange(validated.frequency, todayStr);
   const effectiveFrom = isoDateToUtcStartOfDay(period.startDate);
 
   await db.transaction(async (tx) => {
@@ -632,7 +636,8 @@ export async function updateBudget(budgetId: string, input: BudgetMutationInput)
     categoriesChanged;
 
   const now = new Date();
-  const newPeriod = getBudgetPeriodRange(validated.frequency);
+  const todayStr = input.clientTodayDate ?? (await getServerTodayIso());
+  const newPeriod = getBudgetPeriodRange(validated.frequency, todayStr);
   const cycleStartUtc = isoDateToUtcStartOfDay(newPeriod.startDate);
   const prevPeriodEndUtc = isoDateToUtcEndOfPreviousDay(newPeriod.startDate);
 

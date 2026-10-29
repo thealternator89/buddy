@@ -28,6 +28,7 @@ import {
   getLocalTodayIso,
   getScheduledDueStatus,
 } from '@/lib/utils/scheduled';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { TransactionModal } from './TransactionModal';
 
 interface DueScheduledCarouselProps {
@@ -49,7 +50,7 @@ export function DueScheduledCarousel({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const todayStr = getLocalTodayIso();
+  const todayStr = useBrowserTodayIso();
 
   const dueItems = useMemo(() => {
     return scheduledTransactions

@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import Link from 'next/link';
 import { Wallet, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { loginAction, signupAction, AuthActionState } from '@/lib/actions/auth';
+import { writeBrowserTimeZoneCookie } from '@/lib/utils/timezone';
 
 interface AuthFormProps {
   mode: 'login' | 'signup';
@@ -37,7 +38,13 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         {/* Card */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <form action={formAction} className="space-y-5">
+          <form
+            action={formAction}
+            onSubmit={() => {
+              writeBrowserTimeZoneCookie();
+            }}
+            className="space-y-5"
+          >
             {state?.error && (
               <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/50 dark:text-rose-300">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />

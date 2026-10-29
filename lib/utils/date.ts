@@ -53,7 +53,8 @@ export function formatTransactionGroupDate(
  * Preserves the input array ordering within and across groups.
  */
 export function groupTransactionsByDate(
-  transactions: TransactionWithDetails[]
+  transactions: TransactionWithDetails[],
+  todayStr: string = getLocalTodayIso()
 ): DateGroupedTransactions[] {
   const groupsMap = new Map<string, TransactionWithDetails[]>();
 
@@ -64,7 +65,6 @@ export function groupTransactionsByDate(
   }
 
   const result: DateGroupedTransactions[] = [];
-  const todayStr = getLocalTodayIso();
 
   groupsMap.forEach((txList, dateKey) => {
     result.push({

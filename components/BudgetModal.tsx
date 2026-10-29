@@ -17,6 +17,7 @@ import {
   formatShortIsoDate,
   toUtcIsoDateString,
 } from '@/lib/utils/budget';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { CategoryMultiSelect } from './CategoryMultiSelect';
 import { CurrencyInput } from './CurrencyInput';
 import { cn } from '@/lib/utils';
@@ -52,10 +53,11 @@ export function BudgetModal({
   const [updateMode, setUpdateMode] = useState<BudgetUpdateMode>('current_cycle');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const todayStr = useBrowserTodayIso();
 
   if (!isOpen) return null;
 
-  const targetPeriod = getBudgetPeriodRange(frequency);
+  const targetPeriod = getBudgetPeriodRange(frequency, todayStr);
   const currentCycleStartLabel = formatShortIsoDate(targetPeriod.startDate);
   const previousCycleEndLabel = formatShortIsoDate(
     getPreviousIsoDate(targetPeriod.startDate)
@@ -93,6 +95,7 @@ export function BudgetModal({
             categoryIds,
             updateMode,
             groupName: groupName.trim() || null,
+            clientTodayDate: todayStr,
           });
         } else {
           await createBudget({
@@ -101,6 +104,7 @@ export function BudgetModal({
             amountCents,
             categoryIds,
             groupName: groupName.trim() || null,
+            clientTodayDate: todayStr,
           });
         }
         onClose();
