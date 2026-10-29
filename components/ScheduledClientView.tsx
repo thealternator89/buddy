@@ -34,6 +34,7 @@ import {
   getScheduledDueStatus,
   DueStatusInfo,
 } from '@/lib/utils/scheduled';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { ScheduledTransactionModal } from './ScheduledTransactionModal';
 import { TransactionModal } from './TransactionModal';
 
@@ -63,7 +64,7 @@ export function ScheduledClientView({
   } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const todayStr = getLocalTodayIso();
+  const todayStr = useBrowserTodayIso();
 
   const enrichedItems = useMemo(() => {
     return scheduledTransactions.map((item) => ({

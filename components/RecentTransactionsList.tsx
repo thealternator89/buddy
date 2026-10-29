@@ -12,6 +12,7 @@ import { TransactionWithDetails } from '@/lib/actions/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
 import { deduplicateTransfers, getTransferDetails } from '@/lib/utils/transaction';
 import { groupTransactionsByDate } from '@/lib/utils/date';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { AccountWithBalance } from '@/lib/actions/accounts';
 import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
@@ -34,14 +35,16 @@ export function RecentTransactionsList({
     null
   );
 
+  const todayStr = useBrowserTodayIso();
+
   const displayedTransactions = useMemo(
     () => deduplicateTransfers(transactions),
     [transactions]
   );
 
   const groupedTransactions = useMemo(
-    () => groupTransactionsByDate(displayedTransactions),
-    [displayedTransactions]
+    () => groupTransactionsByDate(displayedTransactions, todayStr),
+    [displayedTransactions, todayStr]
   );
 
   return (

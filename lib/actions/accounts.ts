@@ -3,6 +3,7 @@
 import { db } from '@/lib/db';
 import { accountGroups, accounts, transactions, BalanceDisplayMode } from '@/lib/db/schema';
 import { requireUser } from '@/lib/auth';
+import { getServerTodayIso } from '@/lib/server-timezone';
 import { AccountType } from '@/lib/constants';
 import { eq, inArray, sql, asc, and, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -178,7 +179,7 @@ export async function createAccount(data: {
 
   // If a starting balance is provided, create the initial transaction
   if (data.startingBalanceCents && data.startingBalanceCents !== 0) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await getServerTodayIso();
     await db.insert(transactions).values({
       id: crypto.randomUUID(),
       userId: user.id,

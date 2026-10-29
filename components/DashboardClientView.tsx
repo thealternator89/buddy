@@ -16,7 +16,8 @@ import { CategoryNode, CategoryFlatItem } from '@/lib/category-utils';
 import { PayeeWithRules } from '@/lib/actions/payees';
 import { BudgetWithStatus } from '@/lib/actions/budgets';
 import { formatCurrency } from '@/lib/utils/currency';
-import { getLocalTodayIso, getScheduledDueStatus } from '@/lib/utils/scheduled';
+import { getScheduledDueStatus } from '@/lib/utils/scheduled';
+import { useBrowserTodayIso } from '@/lib/utils/timezone';
 import { APP_CONFIG } from '@/lib/constants';
 import { AccountIcon } from '@/components/AccountIcon';
 import { GroupIcon } from '@/components/GroupIcon';
@@ -47,14 +48,14 @@ export function DashboardClientView({
 }: DashboardClientViewProps) {
   // Mobile tab state: 'activity' (default) vs 'accounts'
   const [activeMobileTab, setActiveMobileTab] = useState<'activity' | 'accounts'>('activity');
+  const todayStr = useBrowserTodayIso();
 
   // Count due scheduled transactions for a badge on mobile tab
   const dueCount = useMemo(() => {
-    const todayStr = getLocalTodayIso();
     return scheduledTransactions.filter(
       (item) => getScheduledDueStatus(item.nextDueDate, todayStr).isDue
     ).length;
-  }, [scheduledTransactions]);
+  }, [scheduledTransactions, todayStr]);
 
   // Group accounts for overview display
   const knownGroupIds = new Set(groups.map((g) => g.id));
