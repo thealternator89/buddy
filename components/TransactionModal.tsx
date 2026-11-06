@@ -81,6 +81,7 @@ export function TransactionModal({
   const [date, setDate] = useState(() => getLocalTodayIso());
   const [notes, setNotes] = useState(prefillScheduled?.notes || '');
   const [isCleared, setIsCleared] = useState(true);
+  const [excludeFromBudgets, setExcludeFromBudgets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -144,6 +145,7 @@ export function TransactionModal({
             date,
             notes: notes.trim() || undefined,
             isCleared,
+            excludeFromBudgets: false,
             scheduledTransactionId: prefillScheduled?.id,
           });
           onClose();
@@ -174,6 +176,7 @@ export function TransactionModal({
             date,
             notes: notes.trim() || undefined,
             isCleared,
+            excludeFromBudgets,
             scheduledTransactionId: prefillScheduled?.id,
           });
           onClose();
@@ -397,8 +400,8 @@ export function TransactionModal({
             </>
           )}
 
-          {/* Date & Cleared */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+          {/* Date & Options */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
             <div>
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Date
@@ -412,17 +415,40 @@ export function TransactionModal({
               />
             </div>
 
-            <div className="pt-4 sm:pt-6 flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="cleared"
-                checked={isCleared}
-                onChange={(e) => setIsCleared(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
-              />
-              <label htmlFor="cleared" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none">
-                Cleared transaction
-              </label>
+            <div className="pt-2 sm:pt-5 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="modal-create-cleared"
+                  checked={isCleared}
+                  onChange={(e) => setIsCleared(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+                />
+                <label
+                  htmlFor="modal-create-cleared"
+                  className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
+                >
+                  Cleared transaction
+                </label>
+              </div>
+
+              {type !== 'transfer' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="modal-create-exclude-budgets"
+                    checked={excludeFromBudgets}
+                    onChange={(e) => setExcludeFromBudgets(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+                  />
+                  <label
+                    htmlFor="modal-create-exclude-budgets"
+                    className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
+                  >
+                    Exempt from budgets
+                  </label>
+                </div>
+              )}
             </div>
           </div>
 

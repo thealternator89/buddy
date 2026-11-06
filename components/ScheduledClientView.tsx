@@ -243,8 +243,6 @@ export function ScheduledClientView({
                   </span>
                 </>
               )}
-              <span>•</span>
-              <span className="text-zinc-400">Started {item.startDate}</span>
               {item.notes && (
                 <>
                   <span>•</span>
