@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { and, eq, gt } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { sessions, users } from '@/lib/db/schema';
-import { SESSION_COOKIE_NAME } from '@/lib/constants';
+import { DEMO_USER_EMAIL, SESSION_COOKIE_NAME } from '@/lib/constants';
 
 export { SESSION_COOKIE_NAME };
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -80,7 +80,7 @@ export async function invalidateCurrentSession(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
-export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
+export const getSessionUser = cache(async (): Promise<AuthUser | null> => {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -113,6 +113,35 @@ export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   } catch {
     return null;
   }
+});
+
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
+  const sessionUser = await getSessionUser();
+  if (sessionUser) {
+    return sessionUser;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    try {
+      const demoResult = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+        })
+        .from(users)
+        .where(eq(users.email, DEMO_USER_EMAIL))
+        .limit(1);
+
+      if (demoResult.length > 0) {
+        return demoResult[0];
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 });
 
 export async function requireUser(): Promise<AuthUser> {

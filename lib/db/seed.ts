@@ -2,23 +2,23 @@ import { eq } from 'drizzle-orm';
 import { db, pgClient } from './index';
 import { accountGroups, accounts, categories, payees, transactions, users } from './schema';
 import { hashPassword } from '../auth';
+import { DEMO_USER_EMAIL } from '../constants';
 import crypto from 'crypto';
 
-const DEMO_EMAIL = 'demo@buddy.local';
 const DEMO_PASSWORD = 'password123';
 
 export async function seed() {
   console.log('🌱 Seeding PostgreSQL database...');
 
   // Remove existing demo user (cascades to all demo user records)
-  await db.delete(users).where(eq(users.email, DEMO_EMAIL));
+  await db.delete(users).where(eq(users.email, DEMO_USER_EMAIL));
 
   const userId = crypto.randomUUID();
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   await db.insert(users).values({
     id: userId,
-    email: DEMO_EMAIL,
+    email: DEMO_USER_EMAIL,
     name: 'Demo User',
     passwordHash,
   });
@@ -399,7 +399,7 @@ export async function seed() {
     },
   ]);
 
-  console.log(`✅ Seed completed! Demo account: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+  console.log(`✅ Seed completed! Demo account: ${DEMO_USER_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
 seed()

@@ -15,6 +15,7 @@ export const APP_CONFIG = {
 
 export const SESSION_COOKIE_NAME = 'buddy_session';
 export const TIMEZONE_COOKIE_NAME = 'buddy_tz';
+export const DEMO_USER_EMAIL = 'demo@buddy.local';
 
 export type AccountType = (typeof APP_CONFIG.accountTypes)[number]['value'];
 
