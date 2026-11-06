@@ -5,6 +5,10 @@ import { SESSION_COOKIE_NAME } from '@/lib/constants';
 const PUBLIC_PATHS = ['/login', '/signup'];
 
 export function proxy(request: NextRequest) {
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.next();
+  }
+
   const { pathname } = request.nextUrl;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
