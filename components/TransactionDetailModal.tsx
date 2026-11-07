@@ -161,7 +161,7 @@ function TransactionEditForm({
             date,
             notes: notes.trim() || null,
             isCleared,
-            excludeFromBudgets,
+            excludeFromBudgets: false,
           });
           onSuccess();
         } catch (err: unknown) {
@@ -410,21 +410,23 @@ function TransactionEditForm({
               </label>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="modal-edit-exclude-budgets"
-                checked={excludeFromBudgets}
-                onChange={(e) => setExcludeFromBudgets(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
-              />
-              <label
-                htmlFor="modal-edit-exclude-budgets"
-                className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
-              >
-                Exempt from budgets
-              </label>
-            </div>
+            {!isTransfer && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="modal-edit-exclude-budgets"
+                  checked={excludeFromBudgets}
+                  onChange={(e) => setExcludeFromBudgets(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800"
+                />
+                <label
+                  htmlFor="modal-edit-exclude-budgets"
+                  className="text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none cursor-pointer"
+                >
+                  Exempt from budgets
+                </label>
+              </div>
+            )}
           </div>
         </div>
 

@@ -333,10 +333,6 @@ export function AccountsClientView({ accounts, groups = [] }: AccountsClientView
                 </h3>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex-wrap">
                   <span className="capitalize">{account.type}</span>
-                  <span>•</span>
-                  <span>
-                    {account.transactionCount} {account.transactionCount === 1 ? 'txn' : 'txns'}
-                  </span>
                   {account.excludeFromNetWorth && (
                     <>
                       <span>•</span>
