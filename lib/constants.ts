@@ -9,6 +9,8 @@ export const APP_CONFIG = {
     { value: 'savings', label: 'Savings' },
     { value: 'credit', label: 'Credit Card' },
     { value: 'cash', label: 'Cash / Wallet' },
+    { value: 'investment', label: 'Investment' },
+    { value: 'loan', label: 'Loan' },
     { value: 'other', label: 'Other' },
   ] as const,
 };
