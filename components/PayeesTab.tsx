@@ -15,13 +15,18 @@ import {
   Pencil,
   Trash2,
   ArrowRight,
+  ArrowLeftRight,
   Tag,
   AlertCircle,
   Sliders,
   Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatRuleCondition } from '@/lib/payee-rules';
+import {
+  formatRuleCondition,
+  getPayeeRuleMode,
+  isDirectionOperator,
+} from '@/lib/payee-rules';
 
 interface PayeesTabProps {
   payees: PayeeWithStats[];
@@ -80,6 +85,10 @@ export function PayeesTab({
       result = result.filter((p) => Boolean(p.defaultCategoryId));
     } else if (filterCategory === 'has-rules') {
       result = result.filter((p) => p.rules && p.rules.length > 0);
+    } else if (filterCategory === 'has-direction-rules') {
+      result = result.filter((p) => getPayeeRuleMode(p.rules) === 'direction');
+    } else if (filterCategory === 'has-amount-rules') {
+      result = result.filter((p) => getPayeeRuleMode(p.rules) === 'amount');
     } else if (filterCategory === 'uncategorized') {
       result = result.filter((p) => !p.defaultCategoryId);
     } else if (filterCategory !== 'all') {
@@ -155,7 +164,9 @@ export function PayeesTab({
           >
             <option value="all">All Categories</option>
             <option value="categorized">Categorized Only</option>
-            <option value="has-rules">With Amount Rules</option>
+            <option value="has-rules">With Rules (Any)</option>
+            <option value="has-direction-rules">With Direction Rules</option>
+            <option value="has-amount-rules">With Amount Rules</option>
             <option value="uncategorized">No Default Category</option>
             {flatCategories.map((cat) => {
               const indent = '  '.repeat(cat.depth);
@@ -308,31 +319,53 @@ export function PayeesTab({
                         )}
                         {payee.rules && payee.rules.length > 0 && (
                           <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                            <Sliders className="h-3 w-3" />
+                            {getPayeeRuleMode(payee.rules) === 'direction' ? (
+                              <ArrowLeftRight className="h-3 w-3" />
+                            ) : (
+                              <Sliders className="h-3 w-3" />
+                            )}
                             <span>
-                              {payee.rules.length} {payee.rules.length === 1 ? 'rule' : 'rules'}
+                              {getPayeeRuleMode(payee.rules) === 'direction'
+                                ? `${payee.rules.length} direction ${payee.rules.length === 1 ? 'rule' : 'rules'}`
+                                : `${payee.rules.length} amount ${payee.rules.length === 1 ? 'rule' : 'rules'}`}
                             </span>
                           </span>
                         )}
                       </div>
 
-                      {/* Amount Rules Chips */}
+                      {/* Rules Chips */}
                       {payee.rules && payee.rules.length > 0 && (
                         <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-                          {payee.rules.map((r, i) => (
-                            <span
-                              key={i}
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60"
-                            >
-                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                                {formatRuleCondition(r.operator, r.amountCents)}
+                          {payee.rules.map((r, i) => {
+                            const isDir = isDirectionOperator(r.operator);
+                            return (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60"
+                              >
+                                <span
+                                  className={cn(
+                                    'font-semibold',
+                                    isDir
+                                      ? r.operator === 'income'
+                                        ? 'text-emerald-700 dark:text-emerald-400 font-sans'
+                                        : 'text-rose-700 dark:text-rose-400 font-sans'
+                                      : 'text-zinc-700 dark:text-zinc-300'
+                                  )}
+                                >
+                                  {isDir
+                                    ? r.operator === 'income'
+                                      ? '↓ Income'
+                                      : '↑ Outgoing'
+                                    : formatRuleCondition(r.operator, r.amountCents)}
+                                </span>
+                                <span className="text-zinc-400">➔</span>
+                                <span className="font-sans text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-[150px]">
+                                  {r.categoryName || 'Category'}
+                                </span>
                               </span>
-                              <span className="text-zinc-400">➔</span>
-                              <span className="font-sans text-zinc-800 dark:text-zinc-200 font-medium truncate max-w-[150px]">
-                                {r.categoryName || 'Category'}
-                              </span>
-                            </span>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

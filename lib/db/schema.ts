@@ -184,8 +184,8 @@ export const payeeRules = pgTable(
     categoryId: text('category_id')
       .notNull()
       .references(() => categories.id, { onDelete: 'cascade' }),
-    operator: text('operator', { enum: ['lte', 'gte'] }).notNull(),
-    amountCents: integer('amount_cents').notNull(),
+    operator: text('operator', { enum: ['lte', 'gte', 'income', 'outgoing'] }).notNull(),
+    amountCents: integer('amount_cents').notNull().default(0),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

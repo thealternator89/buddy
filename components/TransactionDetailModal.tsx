@@ -118,17 +118,34 @@ function TransactionEditForm({
   );
   const [error, setError] = useState<string | null>(null);
 
-  const applyPayeeCategory = (targetPayee: PayeeWithRules | null, amount: number) => {
-    if (!targetPayee) {
+  const applyPayeeCategory = (
+    targetPayee: PayeeWithRules | null,
+    amount: number,
+    activeType: 'expense' | 'income' | 'transfer' = type
+  ) => {
+    if (!targetPayee || activeType === 'transfer') {
       setCategorySuggestion(null);
       return;
     }
-    const match = resolvePayeeCategory(targetPayee, amount);
+    const direction = activeType === 'income' ? 'income' : 'outgoing';
+    const match = resolvePayeeCategory(targetPayee, amount, direction);
     if (match) {
       setCategoryId(match.categoryId);
       setCategorySuggestion(match);
     } else {
       setCategorySuggestion(null);
+    }
+  };
+
+  const handleSwitchType = (nextType: 'expense' | 'income') => {
+    setType(nextType);
+    if (isTransfer || !payeeName.trim()) return;
+    const currentPayee =
+      selectedPayeeObj ||
+      payees.find((p) => p.name.toLowerCase() === payeeName.trim().toLowerCase()) ||
+      null;
+    if (currentPayee && (!categoryId || categorySuggestion)) {
+      applyPayeeCategory(currentPayee, amountCents, nextType);
     }
   };
 
@@ -214,7 +231,7 @@ function TransactionEditForm({
           <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800">
             <button
               type="button"
-              onClick={() => setType('expense')}
+              onClick={() => handleSwitchType('expense')}
               className={`flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-all ${
                 type === 'expense'
                   ? 'bg-white text-rose-600 shadow-xs dark:bg-zinc-900 dark:text-rose-400'
@@ -226,7 +243,7 @@ function TransactionEditForm({
             </button>
             <button
               type="button"
-              onClick={() => setType('income')}
+              onClick={() => handleSwitchType('income')}
               className={`flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-lg transition-all ${
                 type === 'income'
                   ? 'bg-white text-emerald-600 shadow-xs dark:bg-zinc-900 dark:text-emerald-400'

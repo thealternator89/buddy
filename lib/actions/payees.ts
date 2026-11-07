@@ -3,7 +3,12 @@
 import { db } from '@/lib/db';
 import { payees, categories, transactions, payeeRules } from '@/lib/db/schema';
 import { requireUser } from '@/lib/auth';
-import { PayeeRuleItem, RuleOperator } from '@/lib/payee-rules';
+import {
+  PayeeRuleItem,
+  RuleOperator,
+  isDirectionOperator,
+  isAmountOperator,
+} from '@/lib/payee-rules';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { revalidatePath } from 'next/cache';
@@ -216,6 +221,48 @@ export async function getPayeesWithStats(): Promise<PayeeWithStats[]> {
   });
 }
 
+function validateAndNormalizePayeeRules(rules?: CreatePayeeRuleInput[]): CreatePayeeRuleInput[] {
+  if (!rules || rules.length === 0) return [];
+
+  const hasDirection = rules.some((r) => isDirectionOperator(r.operator));
+  const hasAmount = rules.some((r) => isAmountOperator(r.operator));
+
+  if (hasDirection && hasAmount) {
+    throw new Error('Cannot set both direction-based and amount-based rules simultaneously.');
+  }
+
+  const seenDirections = new Set<string>();
+  return rules.map((r, idx) => {
+    if (!r.categoryId) {
+      throw new Error(`Rule #${idx + 1} requires a target category.`);
+    }
+    if (isDirectionOperator(r.operator)) {
+      if (seenDirections.has(r.operator)) {
+        throw new Error(
+          `Duplicate direction rule for "${r.operator === 'income' ? 'Income' : 'Outgoing'}".`
+        );
+      }
+      seenDirections.add(r.operator);
+      return {
+        categoryId: r.categoryId,
+        operator: r.operator,
+        amountCents: 0,
+      };
+    }
+    if (isAmountOperator(r.operator)) {
+      if (!Number.isFinite(r.amountCents) || r.amountCents <= 0) {
+        throw new Error(`Rule #${idx + 1} requires a positive amount.`);
+      }
+      return {
+        categoryId: r.categoryId,
+        operator: r.operator,
+        amountCents: Math.round(r.amountCents),
+      };
+    }
+    throw new Error(`Invalid rule operator on Rule #${idx + 1}.`);
+  });
+}
+
 export async function createPayee(
   name: string,
   defaultCategoryId?: string | null,
@@ -227,6 +274,8 @@ export async function createPayee(
   if (!trimmed) {
     throw new Error('Payee name cannot be empty.');
   }
+
+  const normalizedRules = validateAndNormalizePayeeRules(rules);
 
   const existing = await db
     .select({ id: payees.id, name: payees.name })
@@ -252,9 +301,9 @@ export async function createPayee(
       priority: sanitizedPriority,
     });
 
-    if (rules && rules.length > 0) {
-      for (let i = 0; i < rules.length; i++) {
-        const r = rules[i];
+    if (normalizedRules.length > 0) {
+      for (let i = 0; i < normalizedRules.length; i++) {
+        const r = normalizedRules[i];
         await tx.insert(payeeRules).values({
           id: crypto.randomUUID(),
           userId: user.id,
@@ -291,6 +340,9 @@ export async function updatePayee(
     throw new Error('Payee name cannot be empty.');
   }
 
+  const normalizedRules =
+    data.rules !== undefined ? validateAndNormalizePayeeRules(data.rules) : undefined;
+
   const existing = await db
     .select({ id: payees.id, name: payees.name })
     .from(payees)
@@ -326,13 +378,13 @@ export async function updatePayee(
       .set(updateFields)
       .where(and(eq(payees.id, id), eq(payees.userId, user.id)));
 
-    if (data.rules !== undefined) {
+    if (normalizedRules !== undefined) {
       await tx
         .delete(payeeRules)
         .where(and(eq(payeeRules.payeeId, id), eq(payeeRules.userId, user.id)));
 
-      for (let i = 0; i < data.rules.length; i++) {
-        const r = data.rules[i];
+      for (let i = 0; i < normalizedRules.length; i++) {
+        const r = normalizedRules[i];
         await tx.insert(payeeRules).values({
           id: crypto.randomUUID(),
           userId: user.id,
