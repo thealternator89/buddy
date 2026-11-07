@@ -154,13 +154,13 @@ erDiagram
    - `priority` (integer, default 1; 0=Highest, 1=Standard, 2=Low, 3=Archived)
    - `created_at` (timestamptz)
 
-7. **`payee_rules`**: Conditional amount-based categorization rules per payee.
+7. **`payee_rules`**: Conditional direction-based or amount-based categorization rules per payee (mutually exclusive modes per payee).
    - `id` (text, PK)
    - `user_id` (text, FK -> `users.id` on delete `CASCADE`)
    - `payee_id` (text, FK -> `payees.id` on delete `CASCADE`)
    - `category_id` (text, FK -> `categories.id` on delete `CASCADE`)
-   - `operator` (text enum: `lte`, `gte`)
-   - `amount_cents` (integer, not null)
+   - `operator` (text enum: `lte`, `gte`, `income`, `outgoing`)
+   - `amount_cents` (integer, not null, default 0; `0` for direction rules)
    - `sort_order` (integer, default 0)
    - `created_at` (timestamptz)
 
@@ -287,17 +287,23 @@ Payees are configured with a priority classification and conditional rules (`lib
 | **Low** | `2` | Deprioritized to bottom of suggestions |
 | **Archived** | `3` | Hidden from selection comboboxes; retained on historical records |
 
-#### Amount-Based Rule Evaluation (`resolvePayeeCategory`)
+#### Rule Evaluation (`resolvePayeeCategory`)
 
-When a user selects a payee and enters an amount (or imports a transaction via CSV):
-1. Checks the payee's rules against the absolute transaction amount $|amountCents|$.
-2. Evaluates rules with operators:
-   - `lte`: $|amountCents| \le \text{rule.amountCents}$
-   - `gte`: $|amountCents| \ge \text{rule.amountCents}$
-3. **Closest Threshold Matching**: If multiple rules match, Buddy sorts matching rules by mathematical distance to the threshold:
-   $$\text{distance} = \big| |amountCents| - \text{rule.amountCents} \big|$$
-   The rule with the minimal distance wins.
-4. **Fallback**: If no rule matches, Buddy falls back to the payee's `defaultCategoryId`.
+Each payee can optionally configure rules in one of two mutually exclusive modes:
+
+1. **Direction-Based Mode (`income` / `outgoing`)**:
+   - Evaluates the transaction direction (`income` for inflow / positive amounts, `outgoing` for expense / negative amounts).
+   - Matches a rule whose `operator` equals the transaction direction (e.g. *Default: Gift, Income: Reimbursement* or *Default: Interest, Outgoing: Bank Fees*).
+   - Falls back to `defaultCategoryId` if no rule is defined for that direction.
+
+2. **Amount-Based Mode (`lte` / `gte`)**:
+   - Checks the payee's rules against the absolute transaction amount $|amountCents|$:
+     - `lte`: $|amountCents| \le \text{rule.amountCents}$
+     - `gte`: $|amountCents| \ge \text{rule.amountCents}$
+   - **Closest Threshold Matching**: If multiple rules match, Buddy sorts matching rules by mathematical distance to the threshold:
+     $$\text{distance} = \big| |amountCents| - \text{rule.amountCents} \big|$$
+     The rule with the minimal distance wins.
+   - **Fallback**: If no rule matches, Buddy falls back to the payee's `defaultCategoryId`.
 
 ### 3.5 Double-Entry Linked Transfers
 
