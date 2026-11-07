@@ -85,7 +85,9 @@ export const accounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     groupId: text('group_id').references(() => accountGroups.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
-    type: text('type', { enum: ['checking', 'savings', 'credit', 'cash', 'other'] })
+    type: text('type', {
+      enum: ['checking', 'savings', 'credit', 'cash', 'investment', 'loan', 'other'],
+    })
       .notNull()
       .default('checking'),
     icon: text('icon'),

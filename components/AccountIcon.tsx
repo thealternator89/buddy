@@ -8,11 +8,15 @@ export function getAccountIconColorClass(type?: string): string {
     case 'checking':
       return 'text-blue-600 dark:text-blue-400';
     case 'savings':
-      return 'text-amber-600 dark:text-amber-400';
+      return 'text-teal-600 dark:text-teal-400';
     case 'credit':
       return 'text-rose-600 dark:text-rose-400';
     case 'cash':
       return 'text-emerald-600 dark:text-emerald-400';
+    case 'investment':
+      return 'text-purple-600 dark:text-purple-400';
+    case 'loan':
+      return 'text-orange-600 dark:text-orange-400';
     default:
       return 'text-zinc-600 dark:text-zinc-400';
   }

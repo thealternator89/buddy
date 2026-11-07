@@ -59,9 +59,17 @@ export function AccountModal({
 
   const handleTypeChange = (newType: AccountType) => {
     setType(newType);
-    if (!isEditing && newType === 'credit') {
-      setIsDebt(true);
-      setHasCreditLimit(true);
+    if (!isEditing) {
+      if (newType === 'credit') {
+        setIsDebt(true);
+        setHasCreditLimit(true);
+      } else if (newType === 'loan') {
+        setIsDebt(true);
+        setHasCreditLimit(false);
+      } else {
+        setIsDebt(false);
+        setHasCreditLimit(false);
+      }
     }
   };
 

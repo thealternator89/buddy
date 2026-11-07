@@ -247,6 +247,11 @@ export const ICON_SYNONYMS: Record<string, string[]> = {
   house: ['House', 'Building', 'Building2', 'Key', 'DoorOpen'],
   rent: ['House', 'Key', 'Receipt', 'Building'],
   mortgage: ['House', 'Landmark', 'FileText', 'Key'],
+  loan: ['Landmark', 'HandCoins', 'Banknote', 'Receipt', 'Scale'],
+  loans: ['Landmark', 'HandCoins', 'Banknote', 'Receipt', 'Scale'],
+  investment: ['TrendingUp', 'PiggyBank', 'Coins', 'CircleDollarSign', 'Landmark'],
+  investments: ['TrendingUp', 'PiggyBank', 'Coins', 'CircleDollarSign', 'Landmark'],
+  invest: ['TrendingUp', 'PiggyBank', 'Coins', 'CircleDollarSign'],
   food: ['Utensils', 'Coffee', 'Pizza', 'Apple', 'Cake', 'CupSoda', 'Sandwich', 'Beer'],
   dining: ['Utensils', 'Wine', 'Beer', 'Pizza', 'Coffee'],
   groceries: ['ShoppingCart', 'ShoppingBag', 'Apple', 'Store'],
@@ -315,6 +320,10 @@ export function resolveIconName(name?: string | null, type?: string): string {
       return 'CreditCard';
     case 'cash':
       return 'Banknote';
+    case 'investment':
+      return 'TrendingUp';
+    case 'loan':
+      return 'Landmark';
     case 'other':
       return 'Landmark';
     default:
