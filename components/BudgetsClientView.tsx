@@ -51,6 +51,12 @@ export function BudgetsClientView({
     setBudgets(serverBudgets);
   }
 
+  // Capture which budgets are starred on initial load so each group starts with its
+  // starred budget first, without reordering the group mid-session when the star moves.
+  const [initialOverviewIds] = useState(
+    () => new Set(serverBudgets.filter((b) => b.isOverview).map((b) => b.budgetId))
+  );
+
   // Drag-and-drop state
   const [dragType, setDragType] = useState<'budget' | 'group' | null>(null);
   const [draggedBudgetId, setDraggedBudgetId] = useState<string | null>(null);
@@ -129,15 +135,18 @@ export function BudgetsClientView({
     singles.sort((x, y) => x.sortOrder - y.sortOrder);
     const sections = Array.from(groups.values());
     for (const g of sections) {
-      g.budgets.sort(
-        (x, y) => new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime()
-      );
+      g.budgets.sort((x, y) => {
+        const xStarred = initialOverviewIds.has(x.budgetId) ? 0 : 1;
+        const yStarred = initialOverviewIds.has(y.budgetId) ? 0 : 1;
+        if (xStarred !== yStarred) return xStarred - yStarred;
+        return new Date(x.createdAt).getTime() - new Date(y.createdAt).getTime();
+      });
     }
     sections.sort(
       (x, y) => (x.budgets[0].groupSortOrder ?? 0) - (y.budgets[0].groupSortOrder ?? 0)
     );
     return { singleBudgets: singles, groupSections: sections };
-  }, [filteredBudgets]);
+  }, [filteredBudgets, initialOverviewIds]);
 
   const groupNames = useMemo(
     () =>
@@ -267,11 +276,7 @@ export function BudgetsClientView({
 
   const renderGroupCard = (group: (typeof groupSections)[number]) => {
     const total = group.budgets.length;
-    const starredIdx = Math.max(
-      0,
-      group.budgets.findIndex((b) => b.isOverview)
-    );
-    const index = Math.min(groupPage[group.groupId] ?? starredIdx, total - 1);
+    const index = Math.min(groupPage[group.groupId] ?? 0, total - 1);
     const setPage = (i: number) => setGroupPage((prev) => ({ ...prev, [group.groupId]: i }));
     return renderCard(group.budgets[index], {
       groupId: group.groupId,
